@@ -1,0 +1,137 @@
+# FILE: .gitignore (project root)
+# ======================================
+# Git Ignore Rules
+# ======================================
+#
+# Files and directories listed here are NOT tracked by git.
+# This prevents accidentally committing secrets, build artifacts,
+# generated files, and machine-specific configs.
+#
+# Rule of thumb: commit SOURCE code, not GENERATED artifacts.
+# If a file can be recreated from source (compiled, downloaded, generated),
+# it should be in .gitignore.
+#
+# To check if a file is ignored:
+#   git check-ignore -v path/to/file
+#
+# To force-add an ignored file (use sparingly):
+#   git add -f path/to/file
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+# Compiled Python bytecode — generated automatically, machine-specific
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments — each developer has their own
+venv/
+.venv/
+env/
+ENV/
+
+# Build and distribution artifacts
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Test and type check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ─── Environment Files (CRITICAL — never commit secrets) ──────────────────────
+# These contain passwords, API keys, and secret keys.
+# Each environment (dev, staging, prod) has its own .env.
+.env
+.env.local
+.env.*.local
+
+# Exception: commit example/template env files
+# (rename to .env.example and leave values blank or with placeholders)
+!.env.example
+
+# ─── Node.js / Frontend ───────────────────────────────────────────────────────
+# Installed packages — recreated from package.json with npm install
+node_modules/
+
+# Vite production build output — generated artifact
+dist/
+.vite/
+
+# npm/yarn logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── AI Model Files (Large Binaries) ─────────────────────────────────────────
+# Trained model weights are large (~15-100MB) and binary.
+# Store in cloud storage (AWS S3, Google Cloud Storage) or use Git LFS.
+ai-module/model/*.h5
+ai-module/model/*.keras
+ai-module/model/*.tflite
+ai-module/model/*.pb
+ai-module/model/logs/          # TensorBoard training logs
+
+# Dataset images — too large for git, use DVC or cloud storage
+ai-module/dataset/accident/
+ai-module/dataset/normal/
+ai-module/dataset/traffic_jam/
+
+# Keep the directory structure but not the contents
+!ai-module/dataset/accident/.gitkeep
+!ai-module/dataset/normal/.gitkeep
+!ai-module/dataset/traffic_jam/.gitkeep
+!ai-module/model/.gitkeep
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+# SQLite test databases — generated during test runs
+*.db
+*.sqlite
+*.sqlite3
+test.db
+test_emergency.db
+
+# ─── Docker / Container Volumes ───────────────────────────────────────────────
+# PostgreSQL data directory — not source code
+deployment/pgdata/
+deployment/volumes/
+
+# ─── IDE / Editor Configs ─────────────────────────────────────────────────────
+# Personal editor preferences — each developer configures their own
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── Operating System Files ───────────────────────────────────────────────────
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows metadata
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+*.log.*
+
+# ─── Temporary Files ──────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig

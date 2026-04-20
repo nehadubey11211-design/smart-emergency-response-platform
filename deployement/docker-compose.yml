@@ -1,0 +1,146 @@
+# FILE: deployment/docker-compose.yml
+# ==========================================
+# Docker Compose — Full Stack Orchestration
+# ==========================================
+#
+# Docker Compose starts ALL services with one command:
+#   docker-compose up --build
+#
+# It handles:
+#   - Building images from Dockerfiles
+#   - Starting containers in the right order (depends_on)
+#   - Setting environment variables
+#   - Networking: containers communicate by service name (not localhost)
+#   - Volumes: persistent data + live code reloading
+#
+# NETWORKING:
+#   Compose creates a private virtual network for all services.
+#   Services reach each other by name: the backend container uses
+#   "db" (not localhost) in DATABASE_URL because Docker routes
+#   "db" to the postgres container's IP automatically.
+#
+# HEALTH CHECKS:
+#   The db service has a healthcheck.
+#   backend's depends_on with condition: service_healthy means
+#   Docker waits until PostgreSQL is READY (not just started)
+#   before launching the backend — prevents "connection refused" errors.
+#
+# VOLUMES:
+#   Named volume (pgdata): persists PostgreSQL data across container restarts.
+#   Bind mount (./backend:/app): live code — file changes appear immediately.
+#
+# INTERVIEW TALKING POINT:
+#   "Using Docker Compose means the project runs identically on every machine.
+#   No more 'works on my machine' — every developer and every CI pipeline
+#   gets the exact same environment."
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL Database ───────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine          # alpine = smaller image (~80MB vs ~400MB)
+    container_name: emergency_db
+    restart: unless-stopped            # Auto-restart unless we explicitly stop it
+
+    environment:
+      POSTGRES_DB:       emergency_db
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres      # Change this in production!
+
+    ports:
+      - "5432:5432"                    # HOST:CONTAINER — expose to host for debugging
+
+    volumes:
+      # Named volume: persists data even when the container is removed
+      - pgdata:/var/lib/postgresql/data
+
+      # Auto-run SQL scripts on FIRST startup (when pgdata is empty).
+      # Files run in alphabetical order: 01_schema.sql before 02_seed.sql.
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ../database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+
+    # Health check: run pg_isready until it succeeds before marking "healthy"
+    # The backend waits for this before starting (depends_on condition below)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d emergency_db"]
+      interval: 5s      # Check every 5 seconds
+      timeout:  5s      # Consider failed if takes >5s
+      retries:  10      # Retry 10 times before marking unhealthy
+      start_period: 10s # Wait 10s after startup before first check
+
+
+  # ── FastAPI Backend ───────────────────────────────────────────────────────
+  backend:
+    build:
+      context:    ..                           # Build context = project root
+      dockerfile: deployment/Dockerfile        # Path to Dockerfile
+
+    container_name: emergency_backend
+    restart: unless-stopped
+
+    ports:
+      - "8000:8000"
+
+    # Wait for PostgreSQL to be healthy before starting the backend
+    depends_on:
+      db:
+        condition: service_healthy
+
+    environment:
+      # Override .env values for Docker environment
+      # "db" is the PostgreSQL service name — Docker DNS resolves it
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/emergency_db
+      SECRET_KEY:   docker-dev-secret-change-in-production
+      DEBUG:        "true"
+
+    volumes:
+      # Bind mount: changes to backend/ files appear instantly inside the container
+      # This enables --reload (hot reload) to pick up code changes without rebuilding
+      - ../backend:/app
+      - ../ai-module:/ai-module      # Backend can access the AI model
+
+    # Development command with --reload for auto-restart on file changes
+    # In production: remove --reload and increase --workers
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+
+  # ── React Frontend ────────────────────────────────────────────────────────
+  frontend:
+    image: node:20-alpine              # Use official Node image (don't build a custom one)
+    container_name: emergency_frontend
+    restart: unless-stopped
+
+    working_dir: /app
+
+    # Install dependencies then start Vite dev server
+    # npm install runs every time the container starts — slow but ensures
+    # dependencies match package.json (important when switching branches)
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
+    volumes:
+      # Bind mount: file changes in frontend/ trigger Vite's HMR instantly
+      - ../frontend:/app
+      # Anonymous volume: prevents the host's node_modules from overriding
+      # the container's node_modules (they may differ: different OS, arch)
+      - /app/node_modules
+
+    ports:
+      - "5173:5173"
+
+    depends_on:
+      - backend
+
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+      VITE_WS_URL:  ws://localhost:8000/api/accidents/ws
+
+
+# ── Named Volumes ──────────────────────────────────────────────────────────
+# Declared here so Docker manages their lifecycle.
+# Data persists in pgdata even after `docker-compose down`.
+# Use `docker-compose down -v` to also delete volumes (WARNING: deletes DB data).
+volumes:
+  pgdata:
+    name: emergency_pgdata  # Explicit name so it's easy to find with `docker volume ls`

@@ -1,0 +1,52 @@
+# FILE: backend/requirements.txt
+# ======================================
+# Python Dependencies
+# ======================================
+#
+# Install all dependencies:
+#   pip install -r requirements.txt
+#
+# Pin EXACT versions (==) in production to guarantee reproducible builds.
+# Using >= or ^ can cause unexpected breakage when a dependency releases
+# a new version with breaking changes.
+#
+# To upgrade a specific package:
+#   pip install --upgrade fastapi
+#   pip freeze | grep fastapi >> requirements.txt
+#
+# To generate this file from your current environment:
+#   pip freeze > requirements.txt
+
+# ─── Web Framework ────────────────────────────────────────────────────────────
+fastapi==0.111.0           # Async web framework — routes, middleware, DI
+uvicorn[standard]==0.30.1  # ASGI server that runs FastAPI
+                           # [standard] includes uvloop (faster event loop) + websockets
+python-multipart==0.0.9    # Required for file upload support in FastAPI
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.30         # ORM — maps Python classes to DB tables
+psycopg2-binary==2.9.9     # PostgreSQL driver (binary = pre-compiled, no gcc needed)
+alembic==1.13.1            # Database migration tool (versioned schema changes)
+
+# ─── Validation & Settings ────────────────────────────────────────────────────
+pydantic==2.7.1            # Data validation — used by FastAPI for schemas
+pydantic[email]==2.7.1     # Email validation support (EmailStr type)
+pydantic-settings==2.3.1   # Settings management from env vars / .env file
+
+# ─── Authentication ───────────────────────────────────────────────────────────
+pyjwt==2.8.0               # JSON Web Token creation and verification
+bcrypt==4.1.3              # Password hashing (slow by design = brute-force resistant)
+
+# ─── AI / Computer Vision ─────────────────────────────────────────────────────
+tensorflow==2.16.1         # Deep learning framework — MobileNetV2 model
+numpy==1.26.4              # Numerical computing — array operations for preprocessing
+opencv-python-headless==4.9.0.80  # Computer vision — video capture + frame processing
+                           # headless = no GUI dependencies (works on servers)
+Pillow==10.3.0             # Image processing — used by TensorFlow's ImageDataGenerator
+
+# ─── HTTP Client ──────────────────────────────────────────────────────────────
+httpx==0.27.0              # Async HTTP client — for calling external APIs (Maps, etc.)
+
+# ─── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1       # Load .env files (pydantic-settings uses this under the hood)
+websockets==12.0           # WebSocket protocol support for uvicorn

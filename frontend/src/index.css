@@ -1,0 +1,153 @@
+/*
+ * FILE: frontend/src/index.css
+ * ===================================
+ * Global Stylesheet — Design Tokens, Base Reset, Utility Classes
+ * ===================================
+ *
+ * CSS CUSTOM PROPERTIES (variables):
+ *   Defined on :root so they're accessible everywhere.
+ *   This is the design token system — ONE place to change the colour palette.
+ *   When you change --red here, every component using var(--red) updates.
+ *
+ *   This is a lightweight alternative to a design system library (e.g. MUI).
+ *
+ * TAILWIND DIRECTIVES:
+ *   @tailwind base      — Preflight: normalises browser default styles
+ *   @tailwind components — Injects component classes (none used here)
+ *   @tailwind utilities  — Injects all utility classes (p-4, flex, etc.)
+ *
+ * INTERVIEW TALKING POINT:
+ *   "I used CSS custom properties for the colour palette so that all components
+ *   share the same tokens. A theme change (e.g. light mode) only requires
+ *   updating the :root variables in this one file."
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design Tokens ──────────────────────────────────────────────────────────
+   All colours are named semantically, not descriptively.
+   var(--red) means "the alert/danger colour", not literally "the colour red".
+   This makes it easy to retheme the app later.
+*/
+:root {
+  --bg-dark:    #0A0E1A;   /* Page background — deep navy */
+  --bg-panel:   #0F1628;   /* Sidebar, modal backgrounds */
+  --bg-card:    #151E35;   /* Card / widget backgrounds */
+  --border:     #1E2D4D;   /* Subtle borders */
+  --red:        #FF2D2D;   /* Danger / critical / active incidents */
+  --orange:     #FF7A00;   /* Warning / high severity */
+  --yellow:     #FFD600;   /* Caution / medium severity */
+  --green:      #00E676;   /* Success / resolved / low severity */
+  --blue:       #2979FF;   /* Info / analytics accent */
+  --text-dim:   #4A6080;   /* Very muted text (disabled, placeholders) */
+  --text-muted: #8899AA;   /* Secondary text (labels, metadata) */
+}
+
+/* ─── Base Reset ─────────────────────────────────────────────────────────────
+   Supplement Tailwind's Preflight with our own defaults.
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background-color: var(--bg-dark);
+  color: #E0EAF8;                           /* Default text: near-white blue */
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+
+  /* Prevent layout shift from scrollbar appearing/disappearing */
+  overflow-x: hidden;
+}
+
+/* ─── Custom Scrollbar ───────────────────────────────────────────────────────
+   Webkit-only (Chrome, Edge, Safari).
+   Firefox uses scrollbar-color + scrollbar-width (standard).
+*/
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: var(--bg-dark); }
+::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #2979FF44; }
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--bg-dark);
+}
+
+/* ─── Shared Component Classes ───────────────────────────────────────────────
+   Common patterns extracted here to avoid repetition.
+   These are semantic names, not utility names.
+*/
+
+/* Card: the basic content block used throughout the dashboard */
+.card {
+  background:    var(--bg-card);
+  border:        1px solid var(--border);
+  border-radius: 6px;
+  padding:       16px;
+}
+
+/* Panel: slightly larger container (sidebar panels, info sections) */
+.panel {
+  background:    var(--bg-panel);
+  border:        1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────────────
+   Page entry animation — applied to every page component via className="page-enter"
+*/
+.page-enter {
+  animation: fadeSlideIn 0.2s ease-out forwards;
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity:   0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity:   1;
+    transform: translateY(0);
+  }
+}
+
+/*
+   Pulse ring — used on active critical incident cards to draw attention.
+   Creates a ripple that expands and fades out, then repeats.
+*/
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0   rgba(255, 45, 45, 0.5); }
+  70%  { box-shadow: 0 0 0 10px rgba(255, 45, 45, 0);   }
+  100% { box-shadow: 0 0 0 0   rgba(255, 45, 45, 0);   }
+}
+
+.pulse-ring {
+  animation: pulse-ring 1.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+}
+
+/* ─── Focus Styles ───────────────────────────────────────────────────────────
+   Custom focus ring for keyboard navigation accessibility.
+   The default browser outline is often invisible on dark backgrounds.
+*/
+:focus-visible {
+  outline:        2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius:  3px;
+}
+
+/* Remove outline for mouse users (only show for keyboard navigation) */
+:focus:not(:focus-visible) {
+  outline: none;
+}

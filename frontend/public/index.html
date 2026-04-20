@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!--
+  FILE: frontend/public/index.html
+  ========================================
+  The Single HTML File for the SPA (Single Page Application)
+  ========================================
+
+  In a React SPA, this is the ONLY HTML file.
+  React swaps the content of <div id="root"> on every navigation —
+  the browser never loads a new HTML file after the initial page load.
+
+  <div id="root">  is the "mount point" — React.createRoot() in main.jsx
+                   attaches the entire React component tree here.
+
+  All <script> and <link> tags for React/Tailwind are injected by Vite
+  during the build process — you don't add them manually here.
+
+  FONT LOADING:
+  Google Fonts are loaded here (not in CSS) so they're requested
+  as early as possible — before the CSS is parsed.
+  preconnect hints tell the browser to open the TCP connection to
+  fonts.googleapis.com immediately, reducing latency.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- SEO / Social sharing metadata -->
+    <title>AI Emergency Response System</title>
+    <meta name="description" content="Real-time accident detection and intelligent traffic management powered by AI." />
+    <meta name="theme-color" content="#0A0E1A" />
+
+    <!-- Favicon — Vite serves /vite.svg from the public/ directory -->
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+
+    <!--
+      Google Fonts — Barlow Condensed (display/headings) + JetBrains Mono (body/code)
+      preconnect: opens TCP connection early (reduces font load time by ~100ms)
+      crossorigin: required for cross-origin font requests
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+
+  <body>
+    <!--
+      React mounts the entire component tree inside this div.
+      The id="root" matches ReactDOM.createRoot(document.getElementById("root"))
+      in frontend/src/main.jsx.
+
+      Before React hydrates, this shows as an empty div.
+      In production, you could add a loading skeleton here.
+    -->
+    <div id="root"></div>
+
+    <!--
+      Vite injects the compiled JS bundle here automatically during build.
+      type="module" enables ES Module syntax (import/export) natively in browsers.
+      The script tag is NOT written manually — Vite adds it.
+    -->
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

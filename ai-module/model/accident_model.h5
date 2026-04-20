@@ -1,0 +1,53 @@
+# ai-module/model/
+
+This directory stores the trained CNN model file.
+
+## accident_model.h5 — NOT included in git
+
+The trained model file `accident_model.h5` is excluded from version control
+because it is a large binary file (~15MB with random weights, ~15-50MB after training).
+
+## How to get the model
+
+### Option 1: Train from scratch (recommended)
+```bash
+cd ai-module
+
+# 1. Add images to the dataset folders:
+#    dataset/accident/    (200+ accident images)
+#    dataset/normal/      (200+ normal road images)
+#    dataset/traffic_jam/ (200+ traffic jam images)
+
+# 2. Train the model
+python train_model.py
+
+# This creates: ai-module/model/accident_model.h5
+```
+
+### Option 2: Generate a minimal test model (random weights, no training data needed)
+```bash
+cd ai-module
+python generate_test_model.py
+
+# Creates a valid .h5 file with random weights
+# Suitable for testing the inference pipeline shape/format
+# NOT suitable for real accident detection (random predictions)
+```
+
+## File structure after training
+```
+model/
+├── accident_model.h5     ← trained model (gitignored)
+├── logs/                 ← TensorBoard logs (gitignored)
+│   ├── phase1/
+│   └── phase2/
+├── generate_test_model.py  ← generates a minimal test model
+└── README.md               ← this file
+```
+
+## Model details
+- Architecture: MobileNetV2 (pretrained ImageNet) + custom head
+- Input:  (None, 224, 224, 3) — batch of RGB images
+- Output: (None, 3)           — softmax probabilities
+- Classes: ['accident', 'normal', 'traffic_jam']  (alphabetical order)
+- Total parameters: ~3.4M (base) + ~330K (head) = ~3.7M
