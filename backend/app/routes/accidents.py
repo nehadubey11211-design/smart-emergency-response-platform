@@ -40,8 +40,8 @@ from app.schemas.accident_schema import (
     AccidentResponse,
     AccidentUpdate,
 )
-from app.services.alert_service import AlertService
-from app.services.notification_service import NotificationService
+from app.services.alert_services import AlertService
+from app.services.notification_services import NotificationService
 
 router = APIRouter()
 

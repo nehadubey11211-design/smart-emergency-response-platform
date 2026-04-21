@@ -38,7 +38,7 @@ from typing import Optional
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 
 from app.config.settings import settings
@@ -247,9 +247,23 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
     response_model=UserResponse,
     summary="Get the currently authenticated user",
 )
-def get_me(token: str, db: Session = Depends(get_db)):
+def get_me(authorization: str = Header(None), db: Session = Depends(get_db)):
     """
     Returns the profile of the user identified by the JWT.
     Used by the frontend after page reload to restore session state.
     """
+    if authorization is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header required",
+        )
+    
+    # Extract token from "Bearer <token>"
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format",
+        )
+    
+    token = authorization.split(" ")[1]
     return get_current_user(token, db)

@@ -44,8 +44,8 @@ class Settings(BaseSettings):
 
     # ── Database ─────────────────────────────────────────────────────────────
     # Format: postgresql://<user>:<password>@<host>:<port>/<database>
-    # When running inside Docker Compose, 'db' is the service name (hostname).
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/emergency_db"
+    # For development, using SQLite (no server required)
+    DATABASE_URL: str = "sqlite:///./emergency.db"
 
     # ── JWT (JSON Web Token) Authentication ──────────────────────────────────
     # SECRET_KEY is used to sign JWT tokens.  Anyone with this key can forge

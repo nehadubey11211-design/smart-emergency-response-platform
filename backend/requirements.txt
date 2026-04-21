@@ -20,6 +20,7 @@
 # ─── Web Framework ────────────────────────────────────────────────────────────
 fastapi==0.111.0           # Async web framework — routes, middleware, DI
 uvicorn[standard]==0.30.1  # ASGI server that runs FastAPI
+
                            # [standard] includes uvloop (faster event loop) + websockets
 python-multipart==0.0.9    # Required for file upload support in FastAPI
 

@@ -38,7 +38,7 @@ from sqlalchemy.orm import Session
 
 from app.database.db import get_db
 from app.models.traffic_model import TrafficSignal, SignalMode
-from app.services.traffic_service import TrafficService
+from app.services.traffic_services import TrafficService
 
 router = APIRouter()
 
