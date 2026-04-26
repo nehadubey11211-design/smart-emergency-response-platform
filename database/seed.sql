@@ -17,6 +17,9 @@
 
 -- ─── Users ───────────────────────────────────────────────────────────────────
 
+import bcrypt
+print(bcrypt.hashpw(b"admin123", bcrypt.gensalt(12)).decode())
+
 INSERT INTO users (name, email, password, role) VALUES
 (
     'System Admin',
