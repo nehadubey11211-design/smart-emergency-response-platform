@@ -50,7 +50,7 @@ This project demonstrates a range of skills interviewers look for:
 │   └──────────────┬──────────────────┘                           │
 │                  │  SQLAlchemy ORM                              │
 │   ┌──────────────▼──────────────────┐                           │
-│   │  PostgreSQL Database            │                           │
+│   │  Neon PostgreSQL Database            │                           │
 │   │  users | accidents | signals    │                           │
 │   └─────────────────────────────────┘                           │
 └─────────────────────────────────────────────────────────────────┘
