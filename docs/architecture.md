@@ -42,7 +42,7 @@ A three-tier architecture that connects live CCTV feeds to an operator dashboard
        │  SQL queries (SQLAlchemy ORM)    │  WebSocket broadcast
        ▼                                  ▼
 ┌──────────────────┐          ┌────────────────────────────────────┐
-│   PostgreSQL DB  │          │      REACT DASHBOARD  (frontend/)  │
+│Neon PostgreSQL DB│          │      REACT DASHBOARD  (frontend/)  │
 │                  │          │                                     │
 │  Tables:         │          │  Pages: Home | Login | Dashboard    │
 │  · users         │◄─────────│         Analytics | History        │
@@ -174,7 +174,7 @@ traffic_signals
 | Layer | Technology | Why |
 |---|---|---|
 | Backend | FastAPI | Native async, WebSocket support, auto Swagger docs, Pydantic validation |
-| Database | PostgreSQL | ENUM types, TIMESTAMPTZ, ACID, great for geospatial (PostGIS extension) |
+| Database | Neon PostgreSQL | ENUM types, TIMESTAMPTZ, ACID, great for geospatial (PostGIS extension) |
 | ORM | SQLAlchemy | Pythonic, works with Alembic migrations, DB-agnostic for testing |
 | Auth | JWT + bcrypt | Stateless (horizontally scalable), bcrypt's cost factor resists brute force |
 | AI | TensorFlow + MobileNetV2 | Runs on CPU in real-time, transfer learning with minimal data |
