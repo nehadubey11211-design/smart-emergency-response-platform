@@ -248,11 +248,3 @@ It is:
 This module plays a critical role in enabling **smart emergency response systems** and improving road safety.
 
 ---
-
-## 👨‍💻 Developed By
-
-* **Neha Dubey** – AI & ML Developer
-* **Yash Agrawal** – AI & ML Developer**Neha Dubey** – AI & ML Developer
-* **Abhishek Taur** – Full Stack AI Developer
-
----
