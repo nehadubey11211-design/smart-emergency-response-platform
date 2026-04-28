@@ -7,47 +7,71 @@
 #   pip install -r requirements.txt
 #
 # Pin EXACT versions (==) in production to guarantee reproducible builds.
-# Using >= or ^ can cause unexpected breakage when a dependency releases
-# a new version with breaking changes.
 #
-# To upgrade a specific package:
-#   pip install --upgrade fastapi
-#   pip freeze | grep fastapi >> requirements.txt
+# NEON MIGRATION CHANGES:
+#   The core dependencies are UNCHANGED because Neon is PostgreSQL-compatible.
+#   No new libraries are needed — psycopg2 already handles SSL connections.
 #
-# To generate this file from your current environment:
-#   pip freeze > requirements.txt
+#   The only change is ensuring psycopg2-binary is present (it was already here)
+#   because it handles the SSL connection to Neon via the sslmode=require
+#   parameter in the DATABASE_URL connection string.
+#
+#   OPTIONAL ADDITION:
+#   If you want to use Neon's HTTP/WebSocket driver instead of the standard
+#   PostgreSQL TCP connection, you can install:
+#     neon-serverless (Node.js only — not applicable here)
+#   For Python with FastAPI, the standard psycopg2 driver works perfectly.
+#
+# SSL NOTES FOR NEON:
+#   psycopg2-binary already includes OpenSSL support.
+#   The ?sslmode=require in your DATABASE_URL is enough to enable SSL.
+#   No additional SSL libraries are needed in Python.
+
 
 # ─── Web Framework ────────────────────────────────────────────────────────────
 fastapi==0.111.0           # Async web framework — routes, middleware, DI
 uvicorn[standard]==0.30.1  # ASGI server that runs FastAPI
-
-                           # [standard] includes uvloop (faster event loop) + websockets
+                           # [standard] includes uvloop + websockets
 python-multipart==0.0.9    # Required for file upload support in FastAPI
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.30         # ORM — maps Python classes to DB tables
-psycopg2-binary==2.9.9     # PostgreSQL driver (binary = pre-compiled, no gcc needed)
+
+# NEON NOTE:
+#   psycopg2-binary is the PostgreSQL driver that handles the TCP+SSL
+#   connection to Neon. The 'binary' variant is pre-compiled (no gcc needed).
+#   The SSL handshake to Neon is handled automatically when your DATABASE_URL
+#   contains ?sslmode=require — no extra code needed beyond what's in db.py.
+psycopg2-binary==2.9.9     # PostgreSQL driver (works with both local PG and Neon)
+
 alembic==1.13.1            # Database migration tool (versioned schema changes)
+                           # Works with Neon exactly the same as local PostgreSQL.
+                           # Just set DATABASE_URL in your environment and run:
+                           #   alembic upgrade head
 
 # ─── Validation & Settings ────────────────────────────────────────────────────
-pydantic==2.7.1            # Data validation — used by FastAPI for schemas
-pydantic[email]==2.7.1     # Email validation support (EmailStr type)
+pydantic==2.7.1            # Data validation
+pydantic[email]==2.7.1     # Email validation support
 pydantic-settings==2.3.1   # Settings management from env vars / .env file
+                           # Used to read DATABASE_URL (your Neon URL) from .env
 
 # ─── Authentication ───────────────────────────────────────────────────────────
 pyjwt==2.8.0               # JSON Web Token creation and verification
-bcrypt==4.1.3              # Password hashing (slow by design = brute-force resistant)
+bcrypt==4.1.3              # Password hashing
 
 # ─── AI / Computer Vision ─────────────────────────────────────────────────────
 tensorflow==2.16.1         # Deep learning framework — MobileNetV2 model
+scipy==1.11.4              # Required for model training (used by TensorFlow/Keras backend)
 numpy==1.26.4              # Numerical computing — array operations for preprocessing
 opencv-python-headless==4.9.0.80  # Computer vision — video capture + frame processing
                            # headless = no GUI dependencies (works on servers)
 Pillow==10.3.0             # Image processing — used by TensorFlow's ImageDataGenerator
 
 # ─── HTTP Client ──────────────────────────────────────────────────────────────
-httpx==0.27.0              # Async HTTP client — for calling external APIs (Maps, etc.)
+httpx==0.27.0              # Async HTTP client
 
 # ─── Utilities ────────────────────────────────────────────────────────────────
-python-dotenv==1.0.1       # Load .env files (pydantic-settings uses this under the hood)
-websockets==12.0           # WebSocket protocol support for uvicorn
+python-dotenv==1.0.1       # Load .env files — IMPORTANT for Neon setup
+                           # This reads your DATABASE_URL (Neon connection string)
+                           # from the .env file into the environment.
+websockets==12.0           # WebSocket protocol support
