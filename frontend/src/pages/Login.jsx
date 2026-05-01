@@ -1,233 +1,279 @@
-/**
- * FILE: frontend/src/pages/Login.jsx
- * =========================================
- * Login Page — Controlled Form with JWT Auth
- * =========================================
- *
- * CONTROLLED COMPONENTS:
- *   In React, a "controlled" input has its value driven by state.
- *   Every keystroke calls onChange → setForm → re-render.
- *   This gives us full control: we can validate, transform, or clear
- *   the input value from JavaScript at any time.
- *
- *   Contrast with "uncontrolled" inputs (using refs), which store their
- *   own state in the DOM — easier to set up but harder to validate.
- *
- * FORM SUBMISSION PATTERN:
- *   1. Prevent default browser form submission (e.preventDefault())
- *   2. Set loading state (shows spinner, disables button)
- *   3. Call API
- *   4. On success: store token, redirect
- *   5. On failure: show error message
- *   6. Always clear loading state in finally block
- *
- * WHY localStorage FOR THE TOKEN?
- *   Simple and works across page reloads.
- *   Production alternative: httpOnly cookies (immune to XSS but require
- *   same-origin CORS setup and CSRF protection).
- */
-
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Siren, Eye, EyeOff, Loader2 } from "lucide-react";
-import { login } from "../services/api";
+// NOTE: React Router removed → using window.location for navigation
 
+// ================= FAKE API =================
+// Simulates login API (replace with real backend later)
+const login = async (form) => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (form.email === "admin@test.com" && form.password === "Password123") {
+        resolve({
+          data: {
+            access_token: "demo_token_123",
+            user: { id: 1, email: form.email }
+          }
+        });
+      } else {
+        reject({ response: { data: { detail: "Invalid credentials" } } });
+      }
+    }, 800);
+  });
+};
+
+// Simulates signup API
+const signup = async (form) => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({ data: { message: "User created", user: form } });
+    }, 1000);
+  });
+};
+
+// ================= MAIN COMPONENT =================
 export default function Login() {
-  const navigate = useNavigate();
 
-  // ── Form state ─────────────────────────────────────────────────────────
-  // Single object for related fields keeps updates simple: spread + override
-  const [form,    setForm]    = useState({ email: "", password: "" });
-  const [showPw,  setShowPw]  = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  // Navigation without React Router
+  const navigateToDashboard = () => {
+    try {
+      window.location.href = "/dashboard";
+    } catch (e) {
+      console.error("Navigation failed", e);
+    }
+  };
 
-  /** Generic field updater — works for any input in the form object */
-  const handleChange = (e) =>
+  // ================= STATE =================
+  const [form, setForm] = useState({ name: "", mobile: "", email: "", password: "" });
+  const [showPw, setShowPw] = useState(false); // toggle password visibility
+  const [loading, setLoading] = useState(false); // button loading state
+  const [error, setError] = useState(""); // error message
+  const [isSignup, setIsSignup] = useState(false); // toggle login/signup
+  const [dark, setDark] = useState(true); // theme toggle
+
+  // ================= HANDLE INPUT =================
+  const handleChange = (e) => {
+    setError("");
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
 
+  // ================= HANDLE SUBMIT =================
   const handleSubmit = async (e) => {
-    e.preventDefault();  // Prevent browser's default form POST + page reload
+    e.preventDefault();
     setLoading(true);
     setError("");
 
+    // ===== SIGNUP LOGIC =====
+    if (isSignup) {
+      if (!form.name || !form.mobile || !form.email || !form.password) {
+        setError("All fields required");
+        setLoading(false);
+        return;
+      }
+
+      // Mobile validation (10 digits)
+      if (!/^\d{10}$/.test(form.mobile)) {
+        setError("Mobile must be exactly 10 digits");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        await signup(form);
+        alert("Account Created ✅ Please login");
+        setIsSignup(false);
+        setForm({ name: "", mobile: "", email: "", password: "" });
+      } catch {
+        setError("Signup failed");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ===== LOGIN LOGIC =====
     try {
       const { data } = await login(form);
 
-      // Store auth data for use across pages
+      // Save token & user (simulate auth)
       localStorage.setItem("token", data.access_token);
-      localStorage.setItem("user",  JSON.stringify(data.user));
+      localStorage.setItem("user", JSON.stringify(data.user));
 
-      // Redirect to dashboard — replace() so Back button doesn't return to Login
-      navigate("/dashboard", { replace: true });
+      navigateToDashboard();
     } catch (err) {
-      // Show the backend's error message, or a generic fallback
-      setError(err.response?.data?.detail || "Login failed. Please try again.");
+      setError(err?.response?.data?.detail || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // Shared input style — defined once, applied to both inputs
-  const inputStyle = {
-    background:  "var(--bg-dark)",
-    border:      "1px solid var(--border)",
-    color:       "#E0EAF8",
-    fontFamily:  "'JetBrains Mono', monospace",
+  // ================= STYLES =================
+  // Inline styles used to avoid Tailwind sandbox error
+  const styles = {
+    container: {
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: dark ? "#0f172a" : "#f3f4f6",
+      color: dark ? "#fff" : "#000",
+      position: "relative",
+      fontFamily: "Arial, sans-serif"
+    },
+    card: {
+      width: "100%",
+      maxWidth: "380px",
+      padding: "20px",
+      borderRadius: "12px",
+      background: dark ? "#1e293b" : "#ffffff",
+      boxShadow: "0 10px 25px rgba(0,0,0,0.2)"
+    },
+    input: {
+      padding: "10px",
+      borderRadius: "6px",
+      border: "1px solid #ccc",
+      width: "100%",
+      marginBottom: "10px",
+      outline: "none",
+      background: dark ? "#0f172a" : "#ffffff",
+      color: dark ? "#ffffff" : "#000000" // FIX: ensures text visible in dark/light mode
+    },
+    mainButton: {
+      width: "100%",
+      padding: "10px",
+      background: "red",
+      color: "white",
+      border: "none",
+      marginTop: "10px",
+      cursor: "pointer",
+      borderRadius: "6px"
+    },
+    switchBtn: (active) => ({
+      padding: "6px 12px",
+      borderRadius: "6px",
+      border: "none",
+      cursor: "pointer",
+      background: active ? "#2563eb" : "#9ca3af",
+      color: "white"
+    }),
+    socialBtn: {
+      width: "100%",
+      padding: "8px",
+      marginBottom: "6px",
+      borderRadius: "6px",
+      border: "1px solid #ccc",
+      cursor: "pointer",
+      background: "transparent"
+    }
   };
 
+  // ================= UI =================
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: "var(--bg-dark)" }}
-    >
-      {/* Decorative background grid */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage:
-            "linear-gradient(var(--border) 1px, transparent 1px), " +
-            "linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
-        }}
-        aria-hidden="true"
-      />
+    <div style={styles.container}>
 
-      <div className="relative w-full max-w-sm">
+      {/* Theme Toggle Button */}
+      <button onClick={() => setDark(!dark)} style={{ position: "absolute", top: 20, right: 20 }}>
+        {dark ? "🌞" : "🌙"}
+      </button>
 
-        {/* Brand / Logo */}
-        <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4"
-            style={{
-              background: "rgba(255,45,45,0.15)",
-              border:     "1px solid rgba(255,45,45,0.4)",
-            }}
-          >
-            <Siren size={28} style={{ color: "var(--red)" }} aria-hidden="true" />
+      <div style={styles.card}>
+
+        {/* Header */}
+        <h1 style={{ textAlign: "center", marginBottom: 5 }}>AI ACCIDENT SYSTEM</h1>
+        <h3 style={{ textAlign: "center", marginBottom: 15 }}>
+          {isSignup ? "Create Account" : "Welcome Back"}
+        </h3>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit}>
+
+          {/* Signup Fields */}
+          {isSignup && (
+            <>
+              <input name="name" placeholder="Full Name" value={form.name} onChange={handleChange} style={styles.input} />
+              <input name="mobile" placeholder="Mobile Number" value={form.mobile} onChange={handleChange} style={styles.input} />
+            </>
+          )}
+
+          {/* Email */}
+          <input name="email" placeholder="Email" value={form.email} onChange={handleChange} style={styles.input} />
+
+          {/* Password */}
+          <div style={{ position: "relative" }}>
+            <input
+              type={showPw ? "text" : "password"}
+              name="password"
+              placeholder="Password"
+              value={form.password}
+              onChange={handleChange}
+              style={{ ...styles.input, marginBottom: 0 }}
+            />
+
+            {/* Toggle Password Visibility */}
+            <button
+              type="button"
+              onClick={() => setShowPw(!showPw)}
+              style={{ position: "absolute", right: 10, top: 10 }}
+            >
+              {showPw ? "👁️" : "🙈"}
+            </button>
           </div>
-          <h1
-            className="text-2xl font-bold tracking-wider"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+
+          {/* Error Message */}
+          {error && <p style={{ color: "red", fontSize: "12px" }}>{error}</p>}
+
+          {/* Submit Button */}
+          <button type="submit" style={styles.mainButton}>
+            {loading ? "Processing..." : isSignup ? "SIGN UP" : "SIGN IN"}
+          </button>
+        </form>
+
+        {/* Toggle Login/Signup */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 15 }}>
+          <button style={styles.switchBtn(!isSignup)} onClick={() => setIsSignup(false)}>
+            Sign In
+          </button>
+          <button style={styles.switchBtn(isSignup)} onClick={() => setIsSignup(true)}>
+            Sign Up
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div style={{ textAlign: "center", margin: "10px 0", fontSize: "12px", opacity: 0.6 }}>
+          OR
+        </div>
+
+        {/* Social Login Buttons */}
+        <div>
+          <button
+            style={styles.socialBtn}
+            onClick={() => window.location.href = "https://accounts.google.com/"}
           >
-            EMERGENCY RESPONSE
-          </h1>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            AI-Powered Incident Management System
-          </p>
+            🔴 Continue with Google
+          </button>
+
+          <button
+            style={styles.socialBtn}
+            onClick={() => window.location.href = "https://www.facebook.com/login/"}
+          >
+            🔵 Continue with Facebook
+          </button>
         </div>
 
-        {/* Login card */}
-        <div className="panel p-6">
-          <form onSubmit={handleSubmit} noValidate>
-            <div className="flex flex-col gap-4">
+        {/* Demo Credentials */}
+        <p style={{ textAlign: "center", marginTop: 10, fontSize: "12px" }}>
+          Demo: admin@test.com / Password123
+        </p>
 
-              {/* Email field */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="email"
-                  className="text-xs uppercase tracking-widest"
-                  style={{ color: "var(--text-muted)", fontFamily: "'Barlow Condensed', sans-serif" }}
-                >
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="operator@emergency.com"
-                  value={form.email}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 rounded-md text-sm outline-none transition-colors"
-                  style={inputStyle}
-                  onFocus={(e) => (e.target.style.borderColor = "var(--red)")}
-                  onBlur={(e)  => (e.target.style.borderColor = "var(--border)")}
-                />
-              </div>
-
-              {/* Password field with show/hide toggle */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="password"
-                  className="text-xs uppercase tracking-widest"
-                  style={{ color: "var(--text-muted)", fontFamily: "'Barlow Condensed', sans-serif" }}
-                >
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPw ? "text" : "password"}
-                    required
-                    autoComplete="current-password"
-                    placeholder="••••••••"
-                    value={form.password}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 pr-10 rounded-md text-sm outline-none transition-colors"
-                    style={inputStyle}
-                    onFocus={(e) => (e.target.style.borderColor = "var(--red)")}
-                    onBlur={(e)  => (e.target.style.borderColor = "var(--border)")}
-                  />
-                  {/* Show/hide password toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowPw((v) => !v)}
-                    aria-label={showPw ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    style={{ color: "var(--text-dim)" }}
-                  >
-                    {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Error message */}
-              {error && (
-                <p
-                  role="alert"
-                  className="text-xs px-3 py-2 rounded-md"
-                  style={{
-                    background: "rgba(255,45,45,0.1)",
-                    border:     "1px solid rgba(255,45,45,0.2)",
-                    color:      "var(--red)",
-                  }}
-                >
-                  {error}
-                </p>
-              )}
-
-              {/* Submit button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-2.5 rounded-md font-bold text-sm uppercase
-                           tracking-widest flex items-center justify-center gap-2
-                           transition-opacity duration-200 disabled:opacity-60"
-                style={{
-                  background: "var(--red)",
-                  color:      "#fff",
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  letterSpacing: "0.1em",
-                }}
-              >
-                {loading ? (
-                  <><Loader2 size={14} className="animate-spin" aria-hidden="true" /> Authenticating…</>
-                ) : (
-                  "SIGN IN"
-                )}
-              </button>
-            </div>
-          </form>
-
-          {/* Demo hint */}
-          <p className="text-center text-xs mt-4" style={{ color: "var(--text-dim)" }}>
-            Demo: admin@emergency.com / admin123
-          </p>
-        </div>
       </div>
     </div>
   );
 }
+
+// ================= TEST CASES =================
+// 1. Login success → admin@test.com / Password123
+// 2. Login fail → wrong password shows error
+// 3. Signup empty → shows "All fields required"
+// 4. Signup invalid mobile → shows "Mobile must be 10 digits"
+// 5. Signup success → shows alert and switches to login
+// 6. Toggle Sign In/Sign Up → form updates correctly
+// 7. Theme toggle → background changes
+// 8. Password toggle → 👁️ / 🙈 works correctly
