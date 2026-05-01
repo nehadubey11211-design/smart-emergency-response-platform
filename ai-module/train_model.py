@@ -186,7 +186,7 @@ def build_model() -> Model:
     )
     print(f"🧠 Trainable parameters (Phase 1): {trainable_params:,}")
 
-    return model
+    return model,base_model
 
 
 # ─── Training Callbacks ───────────────────────────────────────────────────────
@@ -273,7 +273,7 @@ def phase1_train_head(model, train_gen, val_gen) -> dict:
     return history.history
 
 
-def phase2_fine_tune(model, train_gen, val_gen) -> dict:
+def phase2_fine_tune(model, base_model, train_gen, val_gen) -> dict:
     """
     Phase 2: Fine-tune the top layers of the base model.
     We unfreeze the last 30 layers and train with a very low learning rate.
@@ -287,9 +287,9 @@ def phase2_fine_tune(model, train_gen, val_gen) -> dict:
     print("PHASE 2: Fine-tuning top layers of base model")
     print("═"*55)
 
-    base_model = model.layers[1]   # MobileNetV2 is the second layer (after Input)
+   # base_model = model.layers[1]   # MobileNetV2 is the second layer (after Input)
     base_model.trainable = True
-
+    print("DEBUG base_model type:", type(base_model))
     # Freeze everything EXCEPT the last 30 layers of the base model
     for layer in base_model.layers[:-30]:
         layer.trainable = False
@@ -360,13 +360,13 @@ def main():
     print("   ⚠️  Make sure CLASS_LABELS in detect_accident.py matches this order!")
 
     # ── Build model ──────────────────────────────────────────────────────
-    model = build_model()
+    model, base_model = build_model()
 
     # ── Phase 1: Train head ──────────────────────────────────────────────
     phase1_train_head(model, train_gen, val_gen)
 
     # ── Phase 2: Fine-tune ───────────────────────────────────────────────
-    phase2_fine_tune(model, train_gen, val_gen)
+    phase2_fine_tune(model, base_model ,train_gen, val_gen)
 
     # ── Evaluate ─────────────────────────────────────────────────────────
     print("\n📊 Final evaluation on validation set:")

@@ -38,6 +38,7 @@ INTERVIEW TALKING POINT:
 """
 
 import os
+from symtable import Class
 import sys
 import time
 from datetime import datetime
@@ -60,7 +61,7 @@ MODEL_PATH  = os.path.join(os.path.dirname(__file__), "model", "accident_model.h
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.75"))
 
 # Analyze every Nth frame (1 per second at 30fps → N=30)
-FRAME_INTERVAL = 30
+FRAME_INTERVAL = 10
 
 # Minimum seconds between alerts for the SAME camera (avoids duplicates)
 ALERT_COOLDOWN_SECONDS = 60
@@ -69,12 +70,12 @@ ALERT_COOLDOWN_SECONDS = 60
 CAMERA_ID = os.getenv("CAMERA_ID", "CAM-001")
 
 # Video source: 0 = default webcam, or a path/URL
-VIDEO_SOURCE = int(os.getenv("VIDEO_SOURCE", "0")) \
+VIDEO_SOURCE =   int(os.getenv("VIDEO_SOURCE", "0")) \
     if os.getenv("VIDEO_SOURCE", "0").isdigit() \
     else os.getenv("VIDEO_SOURCE", "0")
 
-# Class labels — ORDER MUST MATCH the training data directory order
-# (Keras sorts class names alphabetically by default)
+#Class labels — ORDER MUST MATCH the training data directory order
+#(Keras sorts class names alphabetically by default)
 CLASS_LABELS = ["accident", "normal", "traffic_jam"]
 
 

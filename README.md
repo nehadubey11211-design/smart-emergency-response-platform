@@ -9,7 +9,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-18-61DAFB)](https://react.dev)
 [![TensorFlow](https://img.shields.io/badge/TensorFlow-2.16-FF6F00)](https://tensorflow.org)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791)](https://postgresql.org)
+[![Neon PostgreSQL](https://img.shields.io/badge/Neon%20PostgreSQL-15-336791)](https://neon.tech)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)](https://docker.com)
 
 ---
@@ -20,7 +20,7 @@ This project demonstrates a range of skills interviewers look for:
 
 | Skill Area | What This Project Shows |
 |---|---|
-| **Full-Stack Development** | React SPA + FastAPI REST server + PostgreSQL |
+| **Full-Stack Development** | React SPA + FastAPI REST server + Neon PostgreSQL |
 | **Machine Learning** | Transfer learning (MobileNetV2) for real-time video classification |
 | **Real-Time Systems** | WebSocket-based live incident broadcasting |
 | **System Design** | Clean 3-tier layered architecture with separation of concerns |
@@ -50,7 +50,7 @@ This project demonstrates a range of skills interviewers look for:
 │   └──────────────┬──────────────────┘                           │
 │                  │  SQLAlchemy ORM                              │
 │   ┌──────────────▼──────────────────┐                           │
-│   │  Neon PostgreSQL Database            │                           │
+│   │  Neon PostgreSQL Database       │                           │
 │   │  users | accidents | signals    │                           │
 │   └─────────────────────────────────┘                           │
 └─────────────────────────────────────────────────────────────────┘
@@ -69,11 +69,13 @@ docker-compose up --build
 
 ### Manual setup
 ```bash
-# 1. Database
-createdb emergency_db
-psql -U postgres -d emergency_db -f database/schema.sql
-psql -U postgres -d emergency_db -f database/seed.sql
+# 1. Setup Neon Database
+- Create project at https://neon.tech
+- Copy DATABASE_URL
 
+# 2. Run migrations
+psql $DATABASE_URL -f database/schema.sql
+psql $DATABASE_URL -f database/seed.sql
 # 2. Backend
 cd backend && pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
@@ -125,7 +127,7 @@ smart-ai-emergency-response-system/
 │   ├── train_model.py  MobileNetV2 transfer learning pipeline
 │   └── detect_accident.py  Real-time OpenCV + inference loop
 │
-├── database/           PostgreSQL
+├── database/           Neon PostgreSQL
 │   ├── schema.sql      Table definitions + ENUM types
 │   ├── seed.sql        Development data
 │   └── migrations/     Alembic migration environment
@@ -159,7 +161,7 @@ psql -U postgres -d emergency_db -f ../tests/test_database.sql
 | MobileNetV2 transfer learning | Runs on CPU in real-time, good accuracy with limited data |
 | WebSocket over polling | Sub-second push for life-critical alerts; polling adds 5-30s delay |
 | JWT stateless auth | No session storage on server — horizontally scalable |
-| PostgreSQL ENUM types | Validity enforced at DB level, not just application level |
+| Neon PostgreSQL ENUM types | Validity enforced at DB level, not just application level |
 | Pydantic schemas | Separate request/response validation from DB models |
 | Service layer pattern | Keeps route handlers thin and business logic testable |
 | Docker Compose | Reproducible dev environment; works on any machine |
