@@ -107,3 +107,23 @@ export default function StatusPanel() {
     </div>
   );
 }
+/* The StatusPanel component displays real-time system status information:
+StatusPanel is used to show live system status (time, connection, last event)
+
+📡 Check live connection
+Shows LIVE or OFFLINE
+You know if real-time data is coming
+2. ⏰ Shows current time
+Helps track when accident happened
+3. 🚨 Shows last event
+
+Example:
+
+Last: Mumbai accident at 10:45 PM
+
+👉 You instantly know latest activity
+
+4. 🖥️ Backend status
+Shows API is working or not
+
+It is used to monitor your system in real time*/

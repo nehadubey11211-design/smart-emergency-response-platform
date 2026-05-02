@@ -149,3 +149,13 @@ export default function Navbar() {
     </nav>
   );
 }
+
+/* The Navbar component provides a fixed sidebar navigation with icons and tooltips.
+It uses React Router's NavLink to highlight the active page, and includes a logout button 
+that clears auth data and redirects to login. The nav items are defined in a data array for
+ easy maintenance. 
+ 
+ 
+ in easy words 
+ Navbar is used to move between pages and control navigation in your app
+ Full app control*/

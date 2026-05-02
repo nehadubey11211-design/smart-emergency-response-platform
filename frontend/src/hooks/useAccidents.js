@@ -13,6 +13,9 @@
  *       useState(data), useState(loading), useState(error),
  *       useEffect(fetch), useEffect(interval), try/catch...
  *
+ * 
+
+
  *   With this hook:
  *     const { data, loading, error, refetch } = useAccidents({ status: "detected" });
  *     One line, consistent behaviour everywhere.
@@ -100,3 +103,9 @@ export function useAccidents(params = {}, refreshInterval = 30000) {
     refetch: fetchData,  // Call this to manually trigger a refresh
   };
 }
+/*Hooks in React are used to handle data, logic, and side effects inside function components.
+Why we use Hooks?
+1. 📦 To manage data (state)
+
+2. 🕒 To run code automatically (side effects)
+3.To reuse logic across components without duplication*/

@@ -61,3 +61,10 @@ export function useAnalytics(days = 7) {
 
   return { summary, breakdown, trends, loading, error, refetch: fetchAll };
 }
+/*useAnalytics = track what user/app is doing
+Why we use Analytics?
+1. 📊 To understand user behavior and app performance
+2. 📈 To make data-driven decisions for improvements
+3. 🐞 To identify and fix issues based on usage patterns
+4. 🎯 To measure the impact of changes and new features
+5. 🤝 To enhance user experience by tailoring to their needs*/
