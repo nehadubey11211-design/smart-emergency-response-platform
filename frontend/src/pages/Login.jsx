@@ -247,12 +247,3 @@ export default function Login() {
   );
 }
 
-// ================= TEST CASES =================
-// 1. Login success → admin@test.com / Password123
-// 2. Login fail → wrong password shows error
-// 3. Signup empty → shows "All fields required"
-// 4. Signup invalid mobile → shows "Mobile must be 10 digits"
-// 5. Signup success → shows alert and switches to login
-// 6. Toggle Sign In/Sign Up → form updates correctly
-// 7. Theme toggle → background changes
-// 8. Password toggle → 👁️ / 🙈 works correctly
