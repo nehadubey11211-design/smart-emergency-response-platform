@@ -1,3 +1,4 @@
+﻿// Using React Router for navigation
 /**
  * FILE: frontend/src/pages/Login.jsx
  * =========================================
@@ -27,207 +28,222 @@
  *   same-origin CORS setup and CSRF protection).
  */
 
+// ================= AUTH API =================
+// Uses the real backend auth service via frontend/src/services/api.js
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Siren, Eye, EyeOff, Loader2 } from "lucide-react";
-import { login } from "../services/api";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { login, register } from "../services/api";
 
+function getRootClasses(dark) {
+  return dark
+    ? "min-h-screen flex items-center justify-center relative px-4 bg-brand-dark text-white"
+    : "min-h-screen flex items-center justify-center relative px-4 bg-slate-100 text-slate-900";
+}
+
+function getCardClasses(dark) {
+  return dark
+    ? "w-full max-w-md rounded-3xl p-6 shadow-2xl shadow-black/20 bg-brand-card"
+    : "w-full max-w-md rounded-3xl p-6 shadow-2xl shadow-slate-300/20 bg-white";
+}
+
+function getInputClasses(dark) {
+  return dark
+    ? "w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20"
+    : "w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20";
+}
+
+function getSwitchButtonClasses(active, dark) {
+  const base = "rounded-xl px-4 py-2 text-sm font-medium transition";
+  if (active) {
+    return `${base} bg-blue-600 text-white`;
+  }
+  return dark
+    ? `${base} bg-slate-700 text-slate-200 hover:bg-slate-600`
+    : `${base} bg-slate-200 text-slate-700 hover:bg-slate-300`;
+}
+
+function getSocialButtonClasses(dark) {
+  return dark
+    ? "w-full rounded-xl border border-slate-500 bg-transparent px-4 py-3 text-sm text-slate-100 transition hover:border-slate-400 hover:bg-slate-950"
+    : "w-full rounded-xl border border-slate-300 bg-transparent px-4 py-3 text-sm text-slate-900 transition hover:border-slate-400 hover:bg-slate-50";
+}
+
+function ThemeToggle({ dark, toggle }) {
+  return (
+    <button
+      type="button"
+      className={`absolute right-5 top-5 rounded-full border px-3 py-2 text-base transition ${dark ? "border-slate-500 bg-slate-900/70 text-white hover:bg-slate-800" : "border-slate-300 bg-white/90 text-slate-900 hover:bg-slate-200"}`}
+      onClick={toggle}
+    >
+      {dark ? "🌞" : "🌙"}
+    </button>
+  );
+}
+
+function validateSignup(form) {
+  if (!form.name || !form.mobile || !form.email || !form.password) {
+    return "All fields required";
+  }
+  if (!/^\d{10}$/.test(form.mobile)) {
+    return "Mobile must be exactly 10 digits";
+  }
+  return "";
+}
+
+// ================= MAIN COMPONENT =================
 export default function Login() {
   const navigate = useNavigate();
+  const navigateToDashboard = () => navigate("/dashboard", { replace: true });
 
-  // ── Form state ─────────────────────────────────────────────────────────
-  // Single object for related fields keeps updates simple: spread + override
-  const [form,    setForm]    = useState({ email: "", password: "" });
-  const [showPw,  setShowPw]  = useState(false);
+  const [form, setForm] = useState({ name: "", mobile: "", email: "", password: "" });
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  const [error, setError] = useState("");
+  const [isSignup, setIsSignup] = useState(false);
+  const [dark, setDark] = useState(true);
 
-  /** Generic field updater — works for any input in the form object */
-  const handleChange = (e) =>
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();  // Prevent browser's default form POST + page reload
-    setLoading(true);
+  const handleChange = (e) => {
     setError("");
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSignup = async () => {
+    const validationError = validateSignup(form);
+    if (validationError) {
+      setError(validationError);
+      setLoading(false);
+      return;
+    }
 
     try {
-      const { data } = await login(form);
-
-      // Store auth data for use across pages
-      localStorage.setItem("token", data.access_token);
-      localStorage.setItem("user",  JSON.stringify(data.user));
-
-      // Redirect to dashboard — replace() so Back button doesn't return to Login
-      navigate("/dashboard", { replace: true });
+      await register(form);
+      alert("Account Created ✅ Please login");
+      setIsSignup(false);
+      setForm({ name: "", mobile: "", email: "", password: "" });
     } catch (err) {
-      // Show the backend's error message, or a generic fallback
-      setError(err.response?.data?.detail || "Login failed. Please try again.");
+      setError(err?.response?.data?.detail || "Signup failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // Shared input style — defined once, applied to both inputs
-  const inputStyle = {
-    background:  "var(--bg-dark)",
-    border:      "1px solid var(--border)",
-    color:       "#E0EAF8",
-    fontFamily:  "'JetBrains Mono', monospace",
+  const handleLogin = async () => {
+    try {
+      const { data } = await login(form);
+      const token = data.access_token || data.token;
+
+      if (!token) {
+        throw new Error("Invalid response from server");
+      }
+
+      localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(data.user || {}));
+      navigateToDashboard();
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    if (isSignup) {
+      await handleSignup();
+      return;
+    }
+
+    await handleLogin();
+  };
+
+  const pageClasses = getRootClasses(dark);
+  const cardClasses = getCardClasses(dark);
+  const inputClasses = getInputClasses(dark);
+  const socialButtonClasses = getSocialButtonClasses(dark);
+
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: "var(--bg-dark)" }}
-    >
-      {/* Decorative background grid */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage:
-            "linear-gradient(var(--border) 1px, transparent 1px), " +
-            "linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
-        }}
-        aria-hidden="true"
-      />
+    <div className={pageClasses}>
+      <ThemeToggle dark={dark} toggle={() => setDark(!dark)} />
 
-      <div className="relative w-full max-w-sm">
+      <div className={cardClasses}>
+        <h1 className="text-center text-2xl font-semibold tracking-tight">AI ACCIDENT SYSTEM</h1>
+        <h3 className="mt-2 text-center text-sm font-medium text-slate-400">
+          {isSignup ? "Create Account" : "Welcome Back"}
+        </h3>
 
-        {/* Brand / Logo */}
-        <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4"
-            style={{
-              background: "rgba(255,45,45,0.15)",
-              border:     "1px solid rgba(255,45,45,0.4)",
-            }}
-          >
-            <Siren size={28} style={{ color: "var(--red)" }} aria-hidden="true" />
+        <form onSubmit={handleSubmit}>
+          {isSignup && (
+            <>
+              <input name="name" placeholder="Full Name" value={form.name} onChange={handleChange} className={inputClasses} />
+              <input name="mobile" placeholder="Mobile Number" value={form.mobile} onChange={handleChange} className={inputClasses} />
+            </>
+          )}
+
+          <input name="email" placeholder="Email" value={form.email} onChange={handleChange} className={inputClasses} />
+
+          <div className="relative">
+            <input
+              type={showPw ? "text" : "password"}
+              name="password"
+              placeholder="Password"
+              value={form.password}
+              onChange={handleChange}
+              className={`${inputClasses} mb-0`}
+            />
+
+            <button
+              type="button"
+              onClick={() => setShowPw(!showPw)}
+              className={`absolute right-3 top-3 transition ${dark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}
+            >
+              {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
-          <h1
-            className="text-2xl font-bold tracking-wider"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+
+          {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-4 w-full rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            EMERGENCY RESPONSE
-          </h1>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            AI-Powered Incident Management System
-          </p>
+            {loading ? <Loader2 className="animate-spin" size={18} /> : isSignup ? "SIGN UP" : "SIGN IN"}
+          </button>
+        </form>
+
+        <div className="mt-4 flex justify-center gap-3">
+          <button className={getSwitchButtonClasses(!isSignup, dark)} onClick={() => setIsSignup(false)}>
+            Sign In
+          </button>
+          <button className={getSwitchButtonClasses(isSignup, dark)} onClick={() => setIsSignup(true)}>
+            Sign Up
+          </button>
         </div>
 
-        {/* Login card */}
-        <div className="panel p-6">
-          <form onSubmit={handleSubmit} noValidate>
-            <div className="flex flex-col gap-4">
-
-              {/* Email field */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="email"
-                  className="text-xs uppercase tracking-widest"
-                  style={{ color: "var(--text-muted)", fontFamily: "'Barlow Condensed', sans-serif" }}
-                >
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="operator@emergency.com"
-                  value={form.email}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 rounded-md text-sm outline-none transition-colors"
-                  style={inputStyle}
-                  onFocus={(e) => (e.target.style.borderColor = "var(--red)")}
-                  onBlur={(e)  => (e.target.style.borderColor = "var(--border)")}
-                />
-              </div>
-
-              {/* Password field with show/hide toggle */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="password"
-                  className="text-xs uppercase tracking-widest"
-                  style={{ color: "var(--text-muted)", fontFamily: "'Barlow Condensed', sans-serif" }}
-                >
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPw ? "text" : "password"}
-                    required
-                    autoComplete="current-password"
-                    placeholder="••••••••"
-                    value={form.password}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 pr-10 rounded-md text-sm outline-none transition-colors"
-                    style={inputStyle}
-                    onFocus={(e) => (e.target.style.borderColor = "var(--red)")}
-                    onBlur={(e)  => (e.target.style.borderColor = "var(--border)")}
-                  />
-                  {/* Show/hide password toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowPw((v) => !v)}
-                    aria-label={showPw ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    style={{ color: "var(--text-dim)" }}
-                  >
-                    {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Error message */}
-              {error && (
-                <p
-                  role="alert"
-                  className="text-xs px-3 py-2 rounded-md"
-                  style={{
-                    background: "rgba(255,45,45,0.1)",
-                    border:     "1px solid rgba(255,45,45,0.2)",
-                    color:      "var(--red)",
-                  }}
-                >
-                  {error}
-                </p>
-              )}
-
-              {/* Submit button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-2.5 rounded-md font-bold text-sm uppercase
-                           tracking-widest flex items-center justify-center gap-2
-                           transition-opacity duration-200 disabled:opacity-60"
-                style={{
-                  background: "var(--red)",
-                  color:      "#fff",
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  letterSpacing: "0.1em",
-                }}
-              >
-                {loading ? (
-                  <><Loader2 size={14} className="animate-spin" aria-hidden="true" /> Authenticating…</>
-                ) : (
-                  "SIGN IN"
-                )}
-              </button>
-            </div>
-          </form>
-
-          {/* Demo hint */}
-          <p className="text-center text-xs mt-4" style={{ color: "var(--text-dim)" }}>
-            Demo: admin@emergency.com / admin123
-          </p>
+        <div className="text-center my-4 text-xs text-slate-500">
+          OR
         </div>
+
+        <div className="space-y-3">
+          <button className={socialButtonClasses} onClick={() => window.location.href = "https://accounts.google.com/"}>
+            🔴 Continue with Google
+          </button>
+
+          <button className={socialButtonClasses} onClick={() => window.location.href = "https://www.facebook.com/login/"}>
+            🔵 Continue with Facebook
+          </button>
+        </div>
+
+        <p className="mt-4 text-center text-xs text-slate-400">
+          Demo: admin@test.com / Password123
+        </p>
       </div>
     </div>
   );
 }
+
