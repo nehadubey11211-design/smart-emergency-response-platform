@@ -6,35 +6,48 @@ Alembic Migration Environment Configuration
 
 WHAT IS ALEMBIC?
   Alembic is the database migration tool for SQLAlchemy.
-  While SQLAlchemy's create_all() creates tables, it can't:
-    - Safely alter existing columns
-    - Add new columns to populated tables
-    - Track what changes have been applied
+  It handles schema changes in a version-controlled, reversible way.
 
-  Alembic adds:
-    - Version-controlled schema changes (like git for your database)
-    - Auto-generated migrations from model diffs (--autogenerate)
-    - Upgrade/downgrade commands (alembic upgrade head / alembic downgrade -1)
-    - Migration history table (alembic_version in the DB)
+NEON MIGRATION CHANGES IN THIS FILE:
+  The key change for Neon is ensuring that the SQLAlchemy engine
+  created by Alembic uses SSL when connecting to Neon.
 
-TYPICAL WORKFLOW:
-  1. Change a SQLAlchemy model (e.g. add a column)
-  2. Generate migration: alembic revision --autogenerate -m "add phone to users"
-  3. Review the generated file in database/migrations/versions/
-  4. Apply it: alembic upgrade head
-  5. Rollback if needed: alembic downgrade -1
+  In online mode (run_migrations_online), we now pass connect_args
+  with sslmode="require" when the DATABASE_URL points to Neon.
 
-RUN MIGRATIONS:
-  cd backend
-  alembic upgrade head        # Apply all pending migrations
-  alembic downgrade -1        # Rollback the last migration
-  alembic history             # Show migration history
-  alembic current             # Show current DB version
+  This is necessary because Alembic creates its own engine separately
+  from the app's engine in db.py. Without the SSL config here,
+  Alembic migrations would fail with:
+    "SSL connection required. Please use SSL."
+
+RUNNING MIGRATIONS AGAINST NEON:
+  1. Make sure DATABASE_URL is set in your environment or .env file:
+       export DATABASE_URL="postgresql://user:pass@ep-xxx.neon.tech/dbname?sslmode=require"
+     OR add it to backend/.env
+
+  2. Navigate to the backend directory:
+       cd backend
+
+  3. Run migrations:
+       alembic upgrade head       # Apply all pending migrations
+       alembic downgrade -1       # Rollback the last migration
+       alembic history            # View migration history
+       alembic current            # Check current DB version
+
+  4. Generate a new migration after changing a model:
+       alembic revision --autogenerate -m "add phone to users"
+       # Review the generated file in database/migrations/versions/
+       alembic upgrade head
+
+IMPORTANT NOTE ABOUT NEON AND ALEMBIC:
+  Neon supports all standard PostgreSQL DDL commands that Alembic generates.
+  No special handling is needed for CREATE TABLE, ALTER TABLE, ADD COLUMN, etc.
+  The only difference is the SSL connection requirement handled below.
 
 INTERVIEW TALKING POINT:
-  "I set up Alembic for database migrations so schema changes are
-  version-controlled and reversible. In production, migrations run
-  as part of the CI/CD pipeline before the new code is deployed."
+  "Alembic works identically with Neon as with local PostgreSQL. The only
+  change was passing sslmode=require in the connect_args when Neon is detected.
+  The migration files themselves are 100% compatible."
 """
 
 import os
@@ -42,12 +55,10 @@ import sys
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 
 # ── Path Setup ────────────────────────────────────────────────────────────────
 # Add the backend directory to sys.path so we can import our app modules.
-# This script runs from the database/migrations/ directory, so we need to
-# navigate up two levels to reach the backend/ directory.
 sys.path.insert(
     0,
     os.path.join(os.path.dirname(__file__), "..", "..", "backend")
@@ -55,7 +66,6 @@ sys.path.insert(
 
 # Import the SQLAlchemy Base and all models.
 # The models MUST be imported here so Alembic can detect their tables.
-# If a model isn't imported, --autogenerate won't include its table.
 from app.database.db import Base                         # noqa: E402
 from app.models import (                                 # noqa: E402, F401
     user_model,
@@ -67,26 +77,49 @@ from app.config.settings import settings                 # noqa: E402
 # ── Alembic Config ────────────────────────────────────────────────────────────
 config = context.config
 
-# Set up Python logging from the alembic.ini [loggers] section
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Tell Alembic about our models — it compares these against the DB to find diffs
 target_metadata = Base.metadata
 
-# Override the database URL from alembic.ini with our settings
-# This means migrations use the same DATABASE_URL as the app
+# ── Override DATABASE_URL from settings ───────────────────────────────────────
+# This ensures Alembic uses the same DATABASE_URL as the FastAPI app.
+# For Neon, this will include the ?sslmode=require parameter.
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
+
+# ── Neon Detection ────────────────────────────────────────────────────────────
+# Check if we're connecting to Neon so we can apply SSL settings.
+# The same logic as in db.py — centralised detection by DATABASE_URL content.
+
+is_neon = "neon.tech" in settings.DATABASE_URL
+
+
+def get_connect_args() -> dict:
+    """
+    Returns the correct connect_args for the detected database type.
+
+    For Neon: SSL is required.
+    For SQLite/local PostgreSQL: no special args needed.
+    """
+    if is_neon:
+        return {"sslmode": "require"}
+    return {}
 
 
 # ── Offline Mode ──────────────────────────────────────────────────────────────
 def run_migrations_offline() -> None:
     """
-    Run migrations in "offline" mode.
-    Generates SQL scripts without connecting to the database.
-    Useful for: reviewing changes before applying, running on a different server.
+    Run migrations in "offline" mode — generates SQL scripts without
+    connecting to the database.
 
-    Usage: alembic upgrade head --sql > migration.sql
+    NEON USAGE:
+      This mode generates SQL that you can review and run manually
+      via the Neon SQL Editor or psql.
+
+      Usage:
+        alembic upgrade head --sql > migration.sql
+        # Then paste migration.sql into Neon's SQL Editor
     """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -102,17 +135,43 @@ def run_migrations_offline() -> None:
 # ── Online Mode ───────────────────────────────────────────────────────────────
 def run_migrations_online() -> None:
     """
-    Run migrations in "online" mode.
-    Connects to the database and applies changes directly.
-    This is the normal mode: alembic upgrade head
+    Run migrations in "online" mode — connects to the database and applies
+    changes directly.
+
+    NEON CHANGES:
+      - Added connect_args={"sslmode": "require"} for Neon connections
+      - This is the ONLY change needed compared to the original file
+
+    Usage (the normal way):
+      alembic upgrade head
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,   # Don't pool connections for migrations
+    # ── Build engine config ───────────────────────────────────────────────
+    # Get the raw config section from alembic.ini
+    configuration = config.get_section(config.config_ini_section, {})
+
+    # NEON CHANGE:
+    # We create the engine manually (instead of using engine_from_config)
+    # so we can pass connect_args for SSL.
+    #
+    # For Neon: connect_args={"sslmode": "require"} is required.
+    # For local PG/SQLite: connect_args={} (empty — no SSL needed).
+
+    connectable = create_engine(
+        settings.DATABASE_URL,
+
+        # NEON: pass SSL connect_args
+        connect_args=get_connect_args(),
+
+        # NullPool: don't pool connections for migrations
+        # (migrations are one-off operations, not long-running servers)
+        poolclass=pool.NullPool,
     )
+
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+        )
         with context.begin_transaction():
             context.run_migrations()
 
