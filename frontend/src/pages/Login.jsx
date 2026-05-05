@@ -30,7 +30,7 @@ import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { login, register } from "../services/api";
 
-// ─── Tailwind class helpers (centralised, no duplication) ────────────────────
+
 
 function getRootClasses(dark) {
   return dark
@@ -87,11 +87,7 @@ function ThemeToggle({ dark, toggle }) {
 
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-/**
- * Returns an error string or "" if valid.
- * Called BEFORE setLoading(true) so a failed validation
- * never leaves the spinner running.
- */
+
 function validateLogin(form) {
   if (!form.email.trim() || !form.password.trim()) return "Email and password required";
   if (!isValidEmail(form.email)) return "Enter a valid email address";
@@ -108,7 +104,7 @@ function validateSignup(form) {
   return "";
 }
 
-// ─── Safe session helpers (avoids raw JWT + arbitrary server data in storage) ─
+
 
 const ALLOWED_USER_FIELDS = ["id", "name", "email", "role"];
 
@@ -121,15 +117,12 @@ function sanitiseUser(raw) {
 }
 
 function storeSession(token, user, rememberMe = false) {
-  // FIX (Warning): Use sessionStorage for security (clears on tab close).
-  // If "Remember me" is checked, use localStorage for persistence.
-  // For production, prefer httpOnly cookies with CSRF protection and same-origin CORS.
+ 
   const storage = rememberMe ? localStorage : sessionStorage;
   storage.setItem("token", token);
   storage.setItem("user", JSON.stringify(sanitiseUser(user)));
 }
 
-// ─── Password strength calculator ──────────────────────────────────────────
 
 function getPasswordStrength(password) {
   if (!password) return { score: 0, label: "", color: "" };
@@ -151,8 +144,6 @@ function getPasswordStrength(password) {
   return strengths[score];
 }
 
-// ─── Rate-limit hook: prevents rapid re-submissions ──────────────────────────
-
 const COOLDOWN_MS = 800;
 
 function useSubmitCooldown() {
@@ -165,7 +156,7 @@ function useSubmitCooldown() {
   };
 }
 
-// ─── Default form state factory ───────────────────────────────────────────────
+
 
 const emptyForm = (keepEmail = "") => ({
   name: "",
@@ -174,7 +165,6 @@ const emptyForm = (keepEmail = "") => ({
   password: "",
 });
 
-// ─── Main component ───────────────────────────────────────────────────────────
 
 export default function Login() {
   const navigate = useNavigate();
@@ -191,13 +181,12 @@ export default function Login() {
 
   const canSubmit = useSubmitCooldown();
 
-  // ── Centralised mode switcher (FIX Suggestion: no drift across 3 handlers) ──
   const switchMode = (toSignup) => {
     if (loading) return;
     setIsSignup(toSignup);
     setError("");
     setSuccess("");
-    setForm((prev) => emptyForm(prev.email)); // preserve email, clear everything else
+    setForm((prev) => emptyForm(prev.email)); 
     setShowPw(false);
   };
 
@@ -235,15 +224,12 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // FIX (Warning): lightweight submission debounce
     if (!canSubmit()) return;
 
-    // ── FIX (Critical): ALL validation runs BEFORE setLoading ───────────────
-    // This guarantees the spinner never leaks on a validation failure.
     const validationError = isSignup ? validateSignup(form) : validateLogin(form);
     if (validationError) {
       setError(validationError);
-      return; // safe: loading is still false
+      return; 
     }
 
     setLoading(true);
@@ -261,10 +247,10 @@ export default function Login() {
         await handleLogin();
       }
     } catch (err) {
-      // Single, unified error handler for both branches
+
       setError(err?.response?.data?.detail || err?.message || "Something went wrong");
     } finally {
-      // FIX (Critical): always clears — no manual setLoading(false) above
+      
       setLoading(false);
     }
   };
@@ -274,7 +260,6 @@ export default function Login() {
   const inputClasses = getInputClasses(dark);
   const socialButtonClasses = getSocialButtonClasses(dark);
 
-  // Compute password strength once to avoid duplicate calls
   const pwStrength = isSignup && form.password
     ? getPasswordStrength(form.password)
     : null;
@@ -290,10 +275,7 @@ export default function Login() {
         </h3>
 
         <form onSubmit={handleSubmit} noValidate>
-          {/* FIX (Intentional): noValidate disables browser validation.
-              We handle ALL validation in JavaScript (validateLogin/validateSignup).
-              This gives us full control: custom error messages, styling, timing.
-              Do not remove without refactoring error handling. */}
+         
           {isSignup && (
             <>
               <input
@@ -388,7 +370,7 @@ export default function Login() {
                 className="rounded border-slate-400"
                 id="remember-me"
               />
-              <span>Remember me (saves login locally)</span>
+              <span>Remember me </span>
             </label>
           )}
 
@@ -426,7 +408,6 @@ export default function Login() {
           </button>
         </div>
 
-        {/* Social login buttons - controlled by environment variable */}
         {import.meta.env.VITE_ENABLE_SOCIAL_LOGIN === "true" && (
           <>
             <div className="text-center my-4 text-xs text-slate-500">OR</div>
