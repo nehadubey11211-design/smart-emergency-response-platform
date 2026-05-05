@@ -25,7 +25,7 @@
  *   CSRF protection and same-origin CORS setup.
  */
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { login, register } from "../services/api";
@@ -157,12 +157,12 @@ const COOLDOWN_MS = 800;
 
 function useSubmitCooldown() {
   const lastSubmit = useRef(0);
-  return useCallback(() => {
+  return () => {
     const now = Date.now();
     if (now - lastSubmit.current < COOLDOWN_MS) return false;
     lastSubmit.current = now;
     return true;
-  }, []);
+  };
 }
 
 // ─── Default form state factory ───────────────────────────────────────────────
@@ -178,10 +178,7 @@ const emptyForm = (keepEmail = "") => ({
 
 export default function Login() {
   const navigate = useNavigate();
-  const navigateToDashboard = useCallback(
-    () => navigate("/dashboard", { replace: true }),
-    [navigate]
-  );
+  const navigateToDashboard = () => navigate("/dashboard", { replace: true });
 
   const [form, setForm] = useState(emptyForm());
   const [showPw, setShowPw] = useState(false);
@@ -192,25 +189,17 @@ export default function Login() {
   const [dark, setDark] = useState(true);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const formRef = useRef(form);
-  useEffect(() => {
-    formRef.current = form;
-  }, [form]);
-
   const canSubmit = useSubmitCooldown();
 
   // ── Centralised mode switcher (FIX Suggestion: no drift across 3 handlers) ──
-  const switchMode = useCallback(
-    (toSignup) => {
-      if (loading) return;
-      setIsSignup(toSignup);
-      setError("");
-      setSuccess("");
-      setForm(emptyForm(formRef.current.email)); // preserve email, clear everything else
-      setShowPw(false);
-    },
-    [loading]
-  );
+  const switchMode = (toSignup) => {
+    if (loading) return;
+    setIsSignup(toSignup);
+    setError("");
+    setSuccess("");
+    setForm((prev) => emptyForm(prev.email)); // preserve email, clear everything else
+    setShowPw(false);
+  };
 
   const handleChange = (e) => {
     setError("");
@@ -225,21 +214,12 @@ export default function Login() {
     setForm((prev) => ({ ...prev, mobile: digitsOnly }));
   };
 
-  /**
-   * FIX (Critical): handleSignup no longer has an inner try/catch.
-   * It throws on API error so handleSubmit's single catch handles everything.
-   * Validation is done in handleSubmit BEFORE setLoading, so early-return
-   * never leaves the spinner running.
-   */
-  const handleSignup = useCallback(async () => {
+  const handleSignup = async () => {
     const { data } = await register(form);
     return data;
-  }, [form]);
+  };
 
-  /**
-   * FIX (Critical): handleLogin throws on error — no swallowing.
-   */
-  const handleLogin = useCallback(async () => {
+  const handleLogin = async () => {
     const { data } = await login({
       email: form.email.trim(),
       password: form.password.trim(),
@@ -250,7 +230,7 @@ export default function Login() {
 
     storeSession(token, data.user, rememberMe);
     navigateToDashboard();
-  }, [form, navigateToDashboard, rememberMe]);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -275,7 +255,8 @@ export default function Login() {
         await handleSignup();
         setSuccess("Account created! Please sign in.");
         setShowPw(false);
-        switchMode(false);
+        setIsSignup(false);
+        setForm((prev) => emptyForm(prev.email));
       } else {
         await handleLogin();
       }
@@ -292,6 +273,11 @@ export default function Login() {
   const cardClasses = getCardClasses(dark);
   const inputClasses = getInputClasses(dark);
   const socialButtonClasses = getSocialButtonClasses(dark);
+
+  // Compute password strength once to avoid duplicate calls
+  const pwStrength = isSignup && form.password
+    ? getPasswordStrength(form.password)
+    : null;
 
   return (
     <div className={pageClasses}>
@@ -374,9 +360,9 @@ export default function Login() {
             </button>
           </div>
 
-          {isSignup && form.password && (
-            <p className={`mt-2 text-xs font-medium ${getPasswordStrength(form.password).color}`}>
-              Password strength: {getPasswordStrength(form.password).label}
+          {pwStrength && (
+            <p className={`mt-2 text-xs font-medium ${pwStrength.color}`}>
+              Password strength: {pwStrength.label}
             </p>
           )}
 
@@ -392,7 +378,7 @@ export default function Login() {
           )}
 
           {!isSignup && (
-            <label className={`mt-4 flex items-center gap-2 text-xs ${
+            <label htmlFor="remember-me" className={`mt-4 flex items-center gap-2 text-xs ${
               dark ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-900"
             } cursor-pointer transition`}>
               <input
@@ -400,7 +386,7 @@ export default function Login() {
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="rounded border-slate-400"
-                aria-label="Remember me on this device"
+                id="remember-me"
               />
               <span>Remember me (saves login locally)</span>
             </label>
@@ -440,10 +426,8 @@ export default function Login() {
           </button>
         </div>
 
-        {/* Social login buttons disabled until feature ships.
-            Hiding the "OR" divider + buttons to avoid misleading users
-            about available authentication options. */}
-        {false && (
+        {/* Social login buttons - controlled by environment variable */}
+        {import.meta.env.VITE_ENABLE_SOCIAL_LOGIN === "true" && (
           <>
             <div className="text-center my-4 text-xs text-slate-500">OR</div>
             <div className="space-y-3">
