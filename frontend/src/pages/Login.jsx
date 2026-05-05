@@ -28,9 +28,6 @@
  *   same-origin CORS setup and CSRF protection).
  */
 
-// ================= AUTH API =================
-// Uses the real backend auth service via frontend/src/services/api.js
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
@@ -50,8 +47,8 @@ function getCardClasses(dark) {
 
 function getInputClasses(dark) {
   return dark
-    ? "w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20"
-    : "w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20";
+    ? "w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 mt-3 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20"
+    : "w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 mt-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20";
 }
 
 function getSwitchButtonClasses(active, dark) {
@@ -101,11 +98,13 @@ export default function Login() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState(""); 
   const [isSignup, setIsSignup] = useState(false);
   const [dark, setDark] = useState(true);
 
   const handleChange = (e) => {
     setError("");
+    setSuccess("");
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
@@ -113,25 +112,25 @@ export default function Login() {
     const validationError = validateSignup(form);
     if (validationError) {
       setError(validationError);
-      setLoading(false);
       return;
     }
 
     try {
       await register(form);
-      alert("Account Created ✅ Please login");
+      setSuccess("Account created! Please sign in.");
       setIsSignup(false);
       setForm({ name: "", mobile: "", email: "", password: "" });
     } catch (err) {
       setError(err?.response?.data?.detail || "Signup failed");
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleLogin = async () => {
     try {
-      const { data } = await login(form);
+      const { data } = await login({
+        email: form.email,
+        password: form.password,
+      });
       const token = data.access_token || data.token;
 
       if (!token) {
@@ -143,8 +142,6 @@ export default function Login() {
       navigateToDashboard();
     } catch (err) {
       setError(err?.response?.data?.detail || "Login failed");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -153,12 +150,15 @@ export default function Login() {
     setLoading(true);
     setError("");
 
-    if (isSignup) {
-      await handleSignup();
-      return;
+    try {
+      if (isSignup) {
+        await handleSignup();
+      } else {
+        await handleLogin();
+      }
+    } finally {
+      setLoading(false); 
     }
-
-    await handleLogin();
   };
 
   const pageClasses = getRootClasses(dark);
@@ -195,24 +195,25 @@ export default function Login() {
               onChange={handleChange}
               className={`${inputClasses} mb-0`}
             />
-
+ 
             <button
               type="button"
               onClick={() => setShowPw(!showPw)}
-              className={`absolute right-3 top-3 transition ${dark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}
+              className={`absolute right-3 top-1/2 -translate-y-1/2 transition ${dark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"}`}
             >
               {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
 
           {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+          {success && <p className="mt-3 text-sm text-green-400">{success}</p>}
 
           <button
             type="submit"
             disabled={loading}
             className="mt-4 w-full rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {loading ? <Loader2 className="animate-spin" size={18} /> : isSignup ? "SIGN UP" : "SIGN IN"}
+            {loading ? <Loader2 className="animate-spin mx-auto" size={18} /> : isSignup ? "SIGN UP" : "SIGN IN"}
           </button>
         </form>
 
@@ -230,18 +231,26 @@ export default function Login() {
         </div>
 
         <div className="space-y-3">
-          <button className={socialButtonClasses} onClick={() => window.location.href = "https://accounts.google.com/"}>
-            🔴 Continue with Google
+          <button
+            disabled
+            className={`${socialButtonClasses} opacity-50 cursor-not-allowed`}
+          >
+            🔴 Continue with Google (Coming Soon)
           </button>
 
-          <button className={socialButtonClasses} onClick={() => window.location.href = "https://www.facebook.com/login/"}>
-            🔵 Continue with Facebook
+          <button
+            disabled
+            className={`${socialButtonClasses} opacity-50 cursor-not-allowed`}
+          >
+            🔵 Continue with Facebook (Coming Soon)
           </button>
         </div>
 
-        <p className="mt-4 text-center text-xs text-slate-400">
-          Demo: admin@test.com / Password123
-        </p>
+        {import.meta.env.DEV && (
+          <p className="mt-4 text-center text-xs text-slate-400">
+            Demo: admin@test.com / Password123
+          </p>
+        )}
       </div>
     </div>
   );
