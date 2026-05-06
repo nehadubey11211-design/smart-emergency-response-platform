@@ -1,3 +1,4 @@
+﻿// Using React Router for navigation
 /**
  * FILE: frontend/src/pages/Login.jsx
  * =========================================
@@ -10,223 +11,416 @@
  *   This gives us full control: we can validate, transform, or clear
  *   the input value from JavaScript at any time.
  *
- *   Contrast with "uncontrolled" inputs (using refs), which store their
- *   own state in the DOM — easier to set up but harder to validate.
- *
  * FORM SUBMISSION PATTERN:
- *   1. Prevent default browser form submission (e.preventDefault())
+ *   1. Validate before setting loading (so spinner never leaks)
  *   2. Set loading state (shows spinner, disables button)
  *   3. Call API
  *   4. On success: store token, redirect
  *   5. On failure: show error message
  *   6. Always clear loading state in finally block
  *
- * WHY localStorage FOR THE TOKEN?
- *   Simple and works across page reloads.
- *   Production alternative: httpOnly cookies (immune to XSS but require
- *   same-origin CORS setup and CSRF protection).
+ * WHY NOT localStorage FOR THE TOKEN?
+ *   localStorage is XSS-vulnerable. We now use sessionStorage as a
+ *   lighter mitigation. For production, prefer httpOnly cookies with
+ *   CSRF protection and same-origin CORS setup.
  */
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Siren, Eye, EyeOff, Loader2 } from "lucide-react";
-import { login } from "../services/api";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { login, register } from "../services/api";
+
+
+
+function getRootClasses(dark) {
+  return dark
+    ? "min-h-screen flex items-center justify-center relative px-4 bg-brand-dark text-white"
+    : "min-h-screen flex items-center justify-center relative px-4 bg-slate-100 text-slate-900";
+}
+
+function getCardClasses(dark) {
+  return dark
+    ? "w-full max-w-md rounded-3xl p-6 shadow-2xl shadow-black/20 bg-brand-card"
+    : "w-full max-w-md rounded-3xl p-6 shadow-2xl shadow-slate-300/20 bg-white";
+}
+
+function getInputClasses(dark) {
+  return dark
+    ? "w-full rounded-xl border border-slate-600 bg-slate-950 px-4 py-3 mt-3 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20"
+    : "w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 mt-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20";
+}
+
+function getSwitchButtonClasses(active, dark) {
+  const base = "rounded-xl px-4 py-2 text-sm font-medium transition";
+  if (active) return `${base} bg-blue-600 text-white`;
+  return dark
+    ? `${base} bg-slate-700 text-slate-200 hover:bg-slate-600`
+    : `${base} bg-slate-200 text-slate-700 hover:bg-slate-300`;
+}
+
+function getSocialButtonClasses(dark) {
+  return dark
+    ? "w-full rounded-xl border border-slate-500 bg-transparent px-4 py-3 text-sm text-slate-100 transition hover:border-slate-400 hover:bg-slate-950"
+    : "w-full rounded-xl border border-slate-300 bg-transparent px-4 py-3 text-sm text-slate-900 transition hover:border-slate-400 hover:bg-slate-50";
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function ThemeToggle({ dark, toggle }) {
+  return (
+    <button
+      type="button"
+      className={`absolute right-5 top-5 rounded-full border px-3 py-2 text-base transition ${
+        dark
+          ? "border-slate-500 bg-slate-900/70 text-white hover:bg-slate-800"
+          : "border-slate-300 bg-white/90 text-slate-900 hover:bg-slate-200"
+      }`}
+      onClick={toggle}
+      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {dark ? "🌞" : "🌙"}
+    </button>
+  );
+}
+
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+
+function validateLogin(form) {
+  if (!form.email.trim() || !form.password.trim()) return "Email and password required";
+  if (!isValidEmail(form.email)) return "Enter a valid email address";
+  return "";
+}
+
+function validateSignup(form) {
+  if (!form.name.trim() || !form.mobile.trim() || !form.email.trim() || !form.password.trim())
+    return "All fields required";
+  if (form.name.trim().length < 2) return "Enter your full name";
+  if (!isValidEmail(form.email)) return "Enter a valid email address";
+  if (!/^[6-9]\d{9}$/.test(form.mobile)) return "Enter a valid 10-digit mobile number";
+  if (form.password.trim().length < 8) return "Password must be at least 8 characters";
+  return "";
+}
+
+
+
+const ALLOWED_USER_FIELDS = ["id", "name", "email", "role"];
+
+function sanitiseUser(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  return ALLOWED_USER_FIELDS.reduce((acc, key) => {
+    if (Object.prototype.hasOwnProperty.call(raw, key)) acc[key] = raw[key];
+    return acc;
+  }, {});
+}
+
+function storeSession(token, user, rememberMe = false) {
+ 
+  const storage = rememberMe ? localStorage : sessionStorage;
+  storage.setItem("token", token);
+  storage.setItem("user", JSON.stringify(sanitiseUser(user)));
+}
+
+
+function getPasswordStrength(password) {
+  if (!password) return { score: 0, label: "", color: "" };
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[^\w\s]/.test(password)) score++;
+
+  const strengths = [
+    { score: 0, label: "", color: "" },
+    { score: 1, label: "Weak", color: "text-red-400" },
+    { score: 2, label: "Fair", color: "text-orange-400" },
+    { score: 3, label: "Good", color: "text-yellow-400" },
+    { score: 4, label: "Strong", color: "text-lime-400" },
+    { score: 5, label: "Very Strong", color: "text-green-400" },
+  ];
+  return strengths[score];
+}
+
+const COOLDOWN_MS = 800;
+
+function useSubmitCooldown() {
+  const lastSubmit = useRef(0);
+  return () => {
+    const now = Date.now();
+    if (now - lastSubmit.current < COOLDOWN_MS) return false;
+    lastSubmit.current = now;
+    return true;
+  };
+}
+
+
+
+const emptyForm = (keepEmail = "") => ({
+  name: "",
+  mobile: "",
+  email: keepEmail,
+  password: "",
+});
+
 
 export default function Login() {
   const navigate = useNavigate();
+  const navigateToDashboard = () => navigate("/dashboard", { replace: true });
 
-  // ── Form state ─────────────────────────────────────────────────────────
-  // Single object for related fields keeps updates simple: spread + override
-  const [form,    setForm]    = useState({ email: "", password: "" });
-  const [showPw,  setShowPw]  = useState(false);
+  const [form, setForm] = useState(emptyForm());
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [isSignup, setIsSignup] = useState(false);
+  const [dark, setDark] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
 
-  /** Generic field updater — works for any input in the form object */
-  const handleChange = (e) =>
+  const canSubmit = useSubmitCooldown();
+
+  const switchMode = (toSignup) => {
+    if (loading) return;
+    setIsSignup(toSignup);
+    setError("");
+    setSuccess("");
+    setForm((prev) => emptyForm(prev.email)); 
+    setShowPw(false);
+  };
+
+  const handleChange = (e) => {
+    setError("");
+    setSuccess("");
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleMobileChange = (e) => {
+    setError("");
+    setSuccess("");
+    const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 10);
+    setForm((prev) => ({ ...prev, mobile: digitsOnly }));
+  };
+
+  const handleSignup = async () => {
+    const { data } = await register(form);
+    return data;
+  };
+
+  const handleLogin = async () => {
+    const { data } = await login({
+      email: form.email.trim(),
+      password: form.password.trim(),
+    });
+
+    const token = data.access_token || data.token;
+    if (!token) throw new Error("Invalid response from server");
+
+    storeSession(token, data.user, rememberMe);
+    navigateToDashboard();
+  };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();  // Prevent browser's default form POST + page reload
+    e.preventDefault();
+
+    if (!canSubmit()) return;
+
+    const validationError = isSignup ? validateSignup(form) : validateLogin(form);
+    if (validationError) {
+      setError(validationError);
+      return; 
+    }
+
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
-      const { data } = await login(form);
-
-      // Store auth data for use across pages
-      localStorage.setItem("token", data.access_token);
-      localStorage.setItem("user",  JSON.stringify(data.user));
-
-      // Redirect to dashboard — replace() so Back button doesn't return to Login
-      navigate("/dashboard", { replace: true });
+      if (isSignup) {
+        await handleSignup();
+        setSuccess("Account created! Please sign in.");
+        setShowPw(false);
+        setIsSignup(false);
+        setForm((prev) => emptyForm(prev.email));
+      } else {
+        await handleLogin();
+      }
     } catch (err) {
-      // Show the backend's error message, or a generic fallback
-      setError(err.response?.data?.detail || "Login failed. Please try again.");
+
+      setError(err?.response?.data?.detail || err?.message || "Something went wrong");
     } finally {
+      
       setLoading(false);
     }
   };
 
-  // Shared input style — defined once, applied to both inputs
-  const inputStyle = {
-    background:  "var(--bg-dark)",
-    border:      "1px solid var(--border)",
-    color:       "#E0EAF8",
-    fontFamily:  "'JetBrains Mono', monospace",
-  };
+  const pageClasses = getRootClasses(dark);
+  const cardClasses = getCardClasses(dark);
+  const inputClasses = getInputClasses(dark);
+  const socialButtonClasses = getSocialButtonClasses(dark);
+
+  const pwStrength = isSignup && form.password
+    ? getPasswordStrength(form.password)
+    : null;
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: "var(--bg-dark)" }}
-    >
-      {/* Decorative background grid */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage:
-            "linear-gradient(var(--border) 1px, transparent 1px), " +
-            "linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
-        }}
-        aria-hidden="true"
-      />
+    <div className={pageClasses}>
+      <ThemeToggle dark={dark} toggle={() => setDark((d) => !d)} />
 
-      <div className="relative w-full max-w-sm">
+      <div className={cardClasses}>
+        <h1 className="text-center text-2xl font-semibold tracking-tight">AI ACCIDENT SYSTEM</h1>
+        <h3 className="mt-2 text-center text-sm font-medium text-slate-400">
+          {isSignup ? "Create Account" : "Welcome Back"}
+        </h3>
 
-        {/* Brand / Logo */}
-        <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-14 h-14 rounded-xl mb-4"
-            style={{
-              background: "rgba(255,45,45,0.15)",
-              border:     "1px solid rgba(255,45,45,0.4)",
-            }}
-          >
-            <Siren size={28} style={{ color: "var(--red)" }} aria-hidden="true" />
+        <form onSubmit={handleSubmit} noValidate>
+         
+          {isSignup && (
+            <>
+              <input
+                id="signup-name"
+                type="text"
+                name="name"
+                placeholder="Full Name"
+                aria-label="Full name"
+                autoComplete="name"
+                value={form.name}
+                onChange={handleChange}
+                className={inputClasses}
+              />
+
+              <input
+                id="signup-mobile"
+                type="tel"
+                name="mobile"
+                placeholder="Mobile Number"
+                aria-label="Mobile number"
+                autoComplete="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={form.mobile}
+                onChange={handleMobileChange}
+                className={inputClasses}
+              />
+            </>
+          )}
+
+          <input
+            id={isSignup ? "signup-email" : "login-email"}
+            type="email"
+            name="email"
+            placeholder="Email"
+            aria-label="Email address"
+            autoComplete={isSignup ? "email" : "username"}
+            value={form.email}
+            onChange={handleChange}
+            className={inputClasses}
+          />
+
+          <div className="relative mt-3">
+            <input
+              id={isSignup ? "signup-password" : "login-password"}
+              type={showPw ? "text" : "password"}
+              name="password"
+              placeholder="Password"
+              aria-label="Password"
+              autoComplete={isSignup ? "new-password" : "current-password"}
+              value={form.password}
+              onChange={handleChange}
+              className={`${inputClasses} !mt-0`}
+            />
+            <button
+              type="button"
+              aria-label={showPw ? "Hide password" : "Show password"}
+              onClick={() => setShowPw((v) => !v)}
+              className={`absolute right-3 top-1/2 -translate-y-1/2 transition ${
+                dark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              {showPw ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
           </div>
-          <h1
-            className="text-2xl font-bold tracking-wider"
-            style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
+
+          {pwStrength && (
+            <p className={`mt-2 text-xs font-medium ${pwStrength.color}`}>
+              Password strength: {pwStrength.label}
+            </p>
+          )}
+
+          {error && (
+            <p role="alert" aria-live="assertive" className="mt-3 text-sm text-red-400">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p role="status" aria-live="polite" className="mt-3 text-sm text-green-400">
+              {success}
+            </p>
+          )}
+
+          {!isSignup && (
+            <label htmlFor="remember-me" className={`mt-4 flex items-center gap-2 text-xs ${
+              dark ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-900"
+            } cursor-pointer transition`}>
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="rounded border-slate-400"
+                id="remember-me"
+              />
+              <span>Remember me </span>
+            </label>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-4 w-full rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            EMERGENCY RESPONSE
-          </h1>
-          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            AI-Powered Incident Management System
-          </p>
+            {loading ? (
+              <Loader2 className="animate-spin mx-auto" size={18} />
+            ) : isSignup ? (
+              "SIGN UP"
+            ) : (
+              "SIGN IN"
+            )}
+          </button>
+        </form>
+
+        <div className="mt-4 flex justify-center gap-3">
+          <button
+            type="button"
+            className={getSwitchButtonClasses(!isSignup, dark)}
+            disabled={loading}
+            onClick={() => switchMode(false)}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            className={getSwitchButtonClasses(isSignup, dark)}
+            disabled={loading}
+            onClick={() => switchMode(true)}
+          >
+            Sign Up
+          </button>
         </div>
 
-        {/* Login card */}
-        <div className="panel p-6">
-          <form onSubmit={handleSubmit} noValidate>
-            <div className="flex flex-col gap-4">
-
-              {/* Email field */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="email"
-                  className="text-xs uppercase tracking-widest"
-                  style={{ color: "var(--text-muted)", fontFamily: "'Barlow Condensed', sans-serif" }}
-                >
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="operator@emergency.com"
-                  value={form.email}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 rounded-md text-sm outline-none transition-colors"
-                  style={inputStyle}
-                  onFocus={(e) => (e.target.style.borderColor = "var(--red)")}
-                  onBlur={(e)  => (e.target.style.borderColor = "var(--border)")}
-                />
-              </div>
-
-              {/* Password field with show/hide toggle */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="password"
-                  className="text-xs uppercase tracking-widest"
-                  style={{ color: "var(--text-muted)", fontFamily: "'Barlow Condensed', sans-serif" }}
-                >
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    name="password"
-                    type={showPw ? "text" : "password"}
-                    required
-                    autoComplete="current-password"
-                    placeholder="••••••••"
-                    value={form.password}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 pr-10 rounded-md text-sm outline-none transition-colors"
-                    style={inputStyle}
-                    onFocus={(e) => (e.target.style.borderColor = "var(--red)")}
-                    onBlur={(e)  => (e.target.style.borderColor = "var(--border)")}
-                  />
-                  {/* Show/hide password toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowPw((v) => !v)}
-                    aria-label={showPw ? "Hide password" : "Show password"}
-                    className="absolute right-3 top-1/2 -translate-y-1/2"
-                    style={{ color: "var(--text-dim)" }}
-                  >
-                    {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Error message */}
-              {error && (
-                <p
-                  role="alert"
-                  className="text-xs px-3 py-2 rounded-md"
-                  style={{
-                    background: "rgba(255,45,45,0.1)",
-                    border:     "1px solid rgba(255,45,45,0.2)",
-                    color:      "var(--red)",
-                  }}
-                >
-                  {error}
-                </p>
-              )}
-
-              {/* Submit button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-2.5 rounded-md font-bold text-sm uppercase
-                           tracking-widest flex items-center justify-center gap-2
-                           transition-opacity duration-200 disabled:opacity-60"
-                style={{
-                  background: "var(--red)",
-                  color:      "#fff",
-                  fontFamily: "'Barlow Condensed', sans-serif",
-                  letterSpacing: "0.1em",
-                }}
-              >
-                {loading ? (
-                  <><Loader2 size={14} className="animate-spin" aria-hidden="true" /> Authenticating…</>
-                ) : (
-                  "SIGN IN"
-                )}
+        {import.meta.env.VITE_ENABLE_SOCIAL_LOGIN === "true" && (
+          <>
+            <div className="text-center my-4 text-xs text-slate-500">OR</div>
+            <div className="space-y-3">
+              <button disabled className={`${socialButtonClasses} opacity-50 cursor-not-allowed`}>
+                🔴 Continue with Google (Coming Soon)
+              </button>
+              <button disabled className={`${socialButtonClasses} opacity-50 cursor-not-allowed`}>
+                🔵 Continue with Facebook (Coming Soon)
               </button>
             </div>
-          </form>
-
-          {/* Demo hint */}
-          <p className="text-center text-xs mt-4" style={{ color: "var(--text-dim)" }}>
-            Demo: admin@emergency.com / admin123
-          </p>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
