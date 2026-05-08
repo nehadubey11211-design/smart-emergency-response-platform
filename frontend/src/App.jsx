@@ -45,6 +45,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Navbar     from "./components/Navbar.jsx";
 import Home       from "./pages/Home.jsx";
 import Login      from "./pages/Login.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
 import Dashboard  from "./pages/Dashboard.jsx";
 import Analytics  from "./pages/Analytics.jsx";
 import History    from "./pages/History.jsx";
@@ -104,6 +105,7 @@ export default function App() {
         {/* ── Public Routes (no auth required) ──────────────────────────── */}
         <Route path="/"      element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* ── Protected Routes (redirect to /login if not authenticated) ── */}
         <Route

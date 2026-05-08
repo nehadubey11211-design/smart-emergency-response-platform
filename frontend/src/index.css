@@ -62,9 +62,9 @@ body,
   height: 100%;
   background-color: var(--bg-dark);
   color: #E0EAF8;                           /* Default text: near-white blue */
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.6;
+  font-family:'Inter', sans-serif;
+  font-size: 27px;
+  line-height: 2;
 
   /* Prevent layout shift from scrollbar appearing/disappearing */
   overflow-x: hidden;
@@ -150,4 +150,20 @@ body,
 /* Remove outline for mouse users (only show for keyboard navigation) */
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* ─── Leaflet Map Popup Styles ───────────────────────────────────────────────────
+   Dark theme styling for Leaflet map popups in the History component.
+   Uses CSS custom properties to match the app's design system.
+*/
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--bg-card, #1a1f2e);
+  color: #E0EAF8;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+  border: 1px solid var(--border, #2a2f3e);
+}
+
+.leaflet-popup-content {
+  margin: 10px 14px;
 }
