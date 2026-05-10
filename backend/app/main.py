@@ -40,6 +40,9 @@ from app.config.settings import settings
 from app.database.db import engine, Base, check_database_connection, is_neon
 from app.routes import auth, accidents, traffic, analytics
 
+from app.routes import password_reset
+
+
 
 # ─── Application Lifespan ─────────────────────────────────────────────────────
 
@@ -136,6 +139,12 @@ app.include_router(
     analytics.router,
     prefix="/api/analytics",
     tags=["📊 Analytics"],
+)
+
+app.include_router(
+    password_reset.router,
+    prefix="/api/password",
+    tags=["🔐 Password Reset"],
 )
 
 
