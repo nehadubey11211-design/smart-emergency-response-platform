@@ -17,22 +17,28 @@ PASSWORD HASHING NOTE:
   See: backend/app/routes/auth.py → hash_password() and verify_password()
 """
 
-import random
+import secrets
 import string
 import bcrypt
 
 
 def generate_otp(length: int = 6) -> str:
     """
-    Generate a cryptographically random numeric OTP.
+    Generate a cryptographically secure random numeric OTP.
 
-    Uses random.choices() over string.digits — produces a digit-only string
-    which is easiest to type on mobile keyboards.
+    Uses secrets.choice() over random.choices() — the `secrets` module is
+    backed by the OS CSPRNG (/dev/urandom on Linux/macOS, CryptGenRandom on
+    Windows), making output unpredictable even if an attacker observes prior OTPs.
+
+    Why not random.choices()?
+      Python's `random` module uses Mersenne Twister, a PRNG designed for
+      statistical simulations — not security. With ~624 observed outputs an
+      attacker can fully reconstruct its internal state and predict future OTPs.
 
     Why 6 digits?
       6 digits = 10^6 = 1,000,000 possible combinations.
-      Combined with a 5-minute expiry and brute-force lockout (future),
-      this is secure enough for password reset flows.
+      Combined with a 5-minute expiry and rate-limiting/lockout, this is
+      secure enough for password-reset flows.
 
     Args:
         length : Number of digits (default 6)
@@ -44,7 +50,7 @@ def generate_otp(length: int = 6) -> str:
         >>> generate_otp()
         "482910"
     """
-    return "".join(random.choices(string.digits, k=length))
+    return "".join(secrets.choice(string.digits) for _ in range(length))
 
 
 def hash_password(plain_password: str) -> str:
@@ -66,3 +72,4 @@ def hash_password(plain_password: str) -> str:
     salt = bcrypt.gensalt(rounds=12)
     hashed = bcrypt.hashpw(plain_password.encode("utf-8"), salt)
     return hashed.decode("utf-8")
+    
