@@ -26,7 +26,7 @@ OTP STORAGE:
     3. Redis TTL handles expiry automatically (no manual datetime checks needed)
 
   Redis implementation would look like:
-    redis_client.setex(f"otp:{email}", 120, otp)   # key, TTL=2min, value
+    redis_client.setex(f"otp:{email}", 300, otp)   # key, TTL=5min, value
     stored = redis_client.get(f"otp:{email}")
     redis_client.delete(f"otp:{email}")
 """
@@ -77,7 +77,7 @@ class OTPService:
         Flow:
           1. Check user exists in DB (using the same User model from user_model.py)
           2. Generate a 6-digit OTP
-          3. Store OTP in memory with a 2-minute expiry timestamp
+          3. Store OTP in memory with a 5-minute expiry timestamp
           4. Send OTP to user's email (SMTP, same pattern as alert_services.py)
           5. Return success message
 
@@ -111,13 +111,13 @@ class OTPService:
         otp = generate_otp()   # e.g. "482910"
 
         # ── 3. Store OTP with expiry ─────────────────────────────────────────
-        OTPService._store_otp(email=email, otp=otp, expiry_minutes=2)
+        OTPService._store_otp(email=email, otp=otp, expiry_minutes=5)
 
         # ── 4. Send email ────────────────────────────────────────────────────
         OTPService._send_otp_email(recipient_email=email, otp=otp, user_name=user.name)
 
         print(f"🔐 OTP generated and sent to {email} (user: {user.name})")
-        return f"OTP sent to {email}. It is valid for 2 minutes."
+        return f"OTP sent to {email}. It is valid for 5 minutes."
 
     @staticmethod
     async def reset_password(
@@ -154,13 +154,23 @@ class OTPService:
         # ── 1. Verify OTP ────────────────────────────────────────────────────
         is_valid, reason = OTPService._verify_otp(email=email, submitted_otp=otp)
         if not is_valid:
+            if reason == "locked":
+                raise ValueError(
+                    "Too many incorrect attempts. Your OTP has been invalidated. "
+                    "Please request a new one."
+                )
+            if reason.startswith("invalid:"):
+                remaining = reason.split(":")[1]
+                raise ValueError(
+                    f"Incorrect OTP. {remaining} attempt(s) remaining before lockout."
+                )
+
             error_messages = {
                 "not_found": "No OTP was requested for this email. Please request a new one.",
-                "expired":   "Your OTP has expired (2-minute window). Please request a new one.",
-                "invalid":   "Incorrect OTP. Please check the code and try again.",
+                "expired":   "Your OTP has expired (5-minute window). Please request a new one.",
             }
             raise ValueError(error_messages.get(reason, "OTP verification failed."))
-
+        
         # ── 2. Fetch user ────────────────────────────────────────────────────
         user = db.query(User).filter(User.email == email).first()
         if not user:
@@ -178,7 +188,7 @@ class OTPService:
 
         # ── 5. Delete OTP immediately ─────────────────────────────────────────
         # Once used successfully, remove from store.
-        # This means the OTP cannot be replayed even within the 2-minute window.
+        # This means the OTP cannot be replayed even within the 5-minute window.
         OTPService._delete_otp(email)
 
         return "Password reset successfully. You can now log in with your new password."
@@ -186,7 +196,7 @@ class OTPService:
     # ── Private Helpers ────────────────────────────────────────────────────────
 
     @staticmethod
-    def _store_otp(email: str, otp: str, expiry_minutes: int = 2) -> None:
+    def _store_otp(email: str, otp: str, expiry_minutes: int = 5) -> None:
         """
         Save OTP + expiry timestamp to the in-memory store.
 
@@ -196,6 +206,7 @@ class OTPService:
         _otp_store[email] = {
             "otp":        otp,
             "expires_at": datetime.utcnow() + timedelta(minutes=expiry_minutes),
+            "attempts": 0,   # Optional: track failed attempts for rate limiting (not implemented here)
         }
         logger.debug(f"OTP stored for {email}, expires in {expiry_minutes}m")
 
@@ -221,9 +232,16 @@ class OTPService:
         if datetime.utcnow() > record["expires_at"]:
             OTPService._delete_otp(email)   # clean up expired record
             return False, "expired"
+        
+        if record["attempts"] >= 3:
+            OTPService._delete_otp(email)
+            return False, "locked"
 
         if record["otp"] != submitted_otp:
-            return False, "invalid"
+            record["attempts"] += 1
+            remaining = 3 - record["attempts"]
+            logger.warning(f"Wrong OTP for {email} — {remaining} attempt(s) left")
+            return False, f"invalid:{remaining}"   # carry remaining count to caller
 
         return True, "valid"
 
@@ -274,7 +292,7 @@ You requested a password reset for your Smart AI Emergency Response account.
 
 Your OTP code: {otp}
 
-This code is valid for 2 minutes.
+This code is valid for 5 minutes.
 If you did not request this, please ignore this email — your password is unchanged.
 
 — Smart AI Emergency Response System
@@ -315,7 +333,7 @@ If you did not request this, please ignore this email — your password is uncha
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
               <tr>
                 <td style="color: #8899aa; padding: 4px 0; font-size: 13px;">Expires in</td>
-                <td style="color: #fbbf24; font-weight: bold; font-size: 13px;">2 minutes</td>
+                <td style="color: #fbbf24; font-weight: bold; font-size: 13px;">5 minutes</td>
               </tr>
               <tr>
                 <td style="color: #8899aa; padding: 4px 0; font-size: 13px;">Account</td>
