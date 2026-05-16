@@ -71,7 +71,8 @@ router = APIRouter()
     summary="Request a password reset OTP",
     description=(
         "Validates the email, generates a 6-digit OTP, and sends it to "
-        "the user's registered email address. OTP expires in 5 minutes."
+        "the user's registered email address. OTP expires in 5 minutes. "
+        "Always returns 200 to prevent email enumeration attacks."
     ),
 )
 async def forgot_password(
@@ -84,34 +85,43 @@ async def forgot_password(
     Request body:
         { "email": "user@example.com" }
 
-    Success (200):
-        { "message": "OTP sent to user@example.com. It is valid for 5 minutes." }
+    Success (200) — always returned regardless of whether email exists:
+        { "message": "If the account exists, an OTP has been sent to the registered email." }
 
     Errors:
-        404 → email not registered or account deactivated
         502 → SMTP delivery failure (email server unreachable)
         500 → unexpected server error
+
+    Security note:
+        A generic 200 response is returned for both registered and unregistered
+        emails to prevent email enumeration attacks. Only SMTP and unexpected
+        errors are surfaced to the client.
     """
+    # ── Generic response used for all valid/invalid email cases ──────────────
+    _generic_response = MessageResponse(
+        message="If the account exists, an OTP has been sent to the registered email."
+    )
+
     try:
-        message = await OTPService.initiate_password_reset(
+        await OTPService.initiate_password_reset(
             email=request.email,
             db=db,
         )
-        return MessageResponse(message=message)
+        return _generic_response
 
-    except ValueError as e:
-        # ValueError from OTPService = business rule failure
-        # (user not found, account deactivated)
-        logger.warning(f"Forgot password failed for {request.email}: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
+    except ValueError:
+        # Email not registered or account deactivated.
+        # Return the same 200 + generic message so attackers cannot tell
+        # whether an email exists in the system (email enumeration prevention).
+        logger.warning(
+            f"Password reset requested for unknown or inactive account: {request.email!r}"
         )
+        return _generic_response
 
     except smtplib.SMTPException as e:
-        # SMTP failure — email couldn't be delivered
-        # Same error handling pattern as alert_services.py
-        logger.error(f"SMTP error sending OTP to {request.email}: {e}")
+        # SMTP failure — email couldn't be delivered.
+        # Safe to surface this: it reveals nothing about account existence.
+        logger.error(f"SMTP error sending OTP to {request.email!r}: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
@@ -121,8 +131,8 @@ async def forgot_password(
         )
 
     except Exception as e:
-        # Catch-all — always log these so nothing silently fails
-        logger.exception(f"Unexpected error in forgot_password for {request.email}: {e}")
+        # Catch-all — always log so nothing silently fails.
+        logger.exception(f"Unexpected error in forgot_password for {request.email!r}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred. Please try again.",
@@ -177,15 +187,17 @@ async def verify_otp_and_reset(
         return MessageResponse(message=message)
 
     except ValueError as e:
-        # ValueError from OTPService = OTP invalid/expired/not found, or user missing
-        logger.warning(f"OTP verification failed for {request.email}: {e}")
+        # ValueError from OTPService = OTP invalid/expired/not found, or user missing.
+        # 400 is appropriate here: the OTP step is post-submission, so no
+        # additional information about account existence is leaked.
+        logger.warning(f"OTP verification failed for {request.email!r}: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
 
     except Exception as e:
-        logger.exception(f"Unexpected error in verify_otp_and_reset for {request.email}: {e}")
+        logger.exception(f"Unexpected error in verify_otp_and_reset for {request.email!r}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred. Please try again.",
