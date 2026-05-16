@@ -33,6 +33,7 @@ fastapi==0.111.0           # Async web framework — routes, middleware, DI
 uvicorn[standard]==0.30.1  # ASGI server that runs FastAPI
                            # [standard] includes uvloop + websockets
 python-multipart==0.0.9    # Required for file upload support in FastAPI
+slowapi==0.1.9            # Rate limiting for FastAPI (optional, but good for security)
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.30         # ORM — maps Python classes to DB tables
@@ -73,4 +74,3 @@ python-dotenv==1.0.1       # Load .env files — IMPORTANT for Neon setup
                            # This reads your DATABASE_URL (Neon connection string)
                            # from the .env file into the environment.
 websockets==12.0           # WebSocket protocol support
-slowapi==0.1.9            # Rate limiting for FastAPI (optional, but good for security)
