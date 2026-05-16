@@ -38,12 +38,26 @@ API FLOW — step by step:
   │    → Server: verifies OTP, hashes password, updates DB          │
   │    → Response: 200 { "message": "Password reset successfully." }│
   └─────────────────────────────────────────────────────────────────┘
+
+RATE LIMITING:
+  Uses slowapi (pip install slowapi) — integrates directly with FastAPI.
+  The limiter instance is created here and registered globally in main.py.
+
+  Limits:
+    POST /forgot     → 3 requests per hour per IP
+    POST /verify-otp → 10 requests per hour per IP
+
+  The /verify-otp limit is looser because brute-force is already
+  blocked by the 3-attempt counter in OTPService._verify_otp().
+  A 429 response is returned automatically when the limit is exceeded.
 """
 
 import smtplib
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.database.db import get_db
@@ -55,6 +69,13 @@ from app.schemas.password_reset_schema import (
 from app.services.otp_service import OTPService
 
 logger = logging.getLogger(__name__)
+
+# ── Rate Limiter ──────────────────────────────────────────────────────────────
+# Keyed by client IP address via get_remote_address.
+# The limiter is registered globally in main.py:
+#   app.state.limiter = limiter
+#   app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+limiter = Limiter(key_func=get_remote_address)
 
 # ── Router ────────────────────────────────────────────────────────────────────
 # No prefix here — prefix="/api/password" is set in main.py's include_router(),
@@ -72,11 +93,14 @@ router = APIRouter()
     description=(
         "Validates the email, generates a 6-digit OTP, and sends it to "
         "the user's registered email address. OTP expires in 5 minutes. "
-        "Always returns 200 to prevent email enumeration attacks."
+        "Always returns 200 to prevent email enumeration attacks. "
+        "Rate limited to 3 requests per hour per IP."
     ),
 )
+@limiter.limit("3/hour")
 async def forgot_password(
-    request: ForgotPasswordRequest,
+    request: Request,                       # required by slowapi to read client IP
+    body: ForgotPasswordRequest,            # Pydantic schema — moved to `body`
     db: Session = Depends(get_db),
 ):
     """
@@ -89,6 +113,7 @@ async def forgot_password(
         { "message": "If the account exists, an OTP has been sent to the registered email." }
 
     Errors:
+        429 → rate limit exceeded (3 requests/hour/IP) — handled by slowapi
         502 → SMTP delivery failure (email server unreachable)
         500 → unexpected server error
 
@@ -104,7 +129,7 @@ async def forgot_password(
 
     try:
         await OTPService.initiate_password_reset(
-            email=request.email,
+            email=body.email,
             db=db,
         )
         return _generic_response
@@ -114,14 +139,14 @@ async def forgot_password(
         # Return the same 200 + generic message so attackers cannot tell
         # whether an email exists in the system (email enumeration prevention).
         logger.warning(
-            f"Password reset requested for unknown or inactive account: {request.email!r}"
+            f"Password reset requested for unknown or inactive account: {body.email!r}"
         )
         return _generic_response
 
     except smtplib.SMTPException as e:
         # SMTP failure — email couldn't be delivered.
         # Safe to surface this: it reveals nothing about account existence.
-        logger.error(f"SMTP error sending OTP to {request.email!r}: {e}")
+        logger.error(f"SMTP error sending OTP to {body.email!r}: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
@@ -132,7 +157,7 @@ async def forgot_password(
 
     except Exception as e:
         # Catch-all — always log so nothing silently fails.
-        logger.exception(f"Unexpected error in forgot_password for {request.email!r}: {e}")
+        logger.exception(f"Unexpected error in forgot_password for {body.email!r}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred. Please try again.",
@@ -149,11 +174,15 @@ async def forgot_password(
     description=(
         "Verifies the OTP sent to the user's email. "
         "If valid and not expired, hashes the new password and updates it in the database. "
-        "The OTP is deleted immediately after successful use."
+        "The OTP is deleted immediately after successful use. "
+        "Rate limited to 10 requests per hour per IP. "
+        "Additionally locked out after 3 wrong OTP attempts."
     ),
 )
+@limiter.limit("10/hour")
 async def verify_otp_and_reset(
-    request: VerifyOTPRequest,
+    request: Request,                       # required by slowapi to read client IP
+    body: VerifyOTPRequest,                 # Pydantic schema — moved to `body`
     db: Session = Depends(get_db),
 ):
     """
@@ -170,7 +199,8 @@ async def verify_otp_and_reset(
         { "message": "Password reset successfully. You can now log in." }
 
     Errors:
-        400 → OTP not found / expired / incorrect
+        400 → OTP not found / expired / incorrect / locked out
+        429 → rate limit exceeded (10 requests/hour/IP) — handled by slowapi
         500 → unexpected server error
 
     After success:
@@ -179,25 +209,26 @@ async def verify_otp_and_reset(
     """
     try:
         message = await OTPService.reset_password(
-            email=request.email,
-            otp=request.otp,
-            new_password=request.new_password,
+            email=body.email,
+            otp=body.otp,
+            new_password=body.new_password,
             db=db,
         )
         return MessageResponse(message=message)
 
     except ValueError as e:
-        # ValueError from OTPService = OTP invalid/expired/not found, or user missing.
-        # 400 is appropriate here: the OTP step is post-submission, so no
+        # ValueError from OTPService = OTP invalid/expired/not found,
+        # locked out after 3 attempts, or user missing.
+        # 400 is appropriate: the OTP step is post-submission, so no
         # additional information about account existence is leaked.
-        logger.warning(f"OTP verification failed for {request.email!r}: {e}")
+        logger.warning(f"OTP verification failed for {body.email!r}: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
 
     except Exception as e:
-        logger.exception(f"Unexpected error in verify_otp_and_reset for {request.email!r}: {e}")
+        logger.exception(f"Unexpected error in verify_otp_and_reset for {body.email!r}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred. Please try again.",
