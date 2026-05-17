@@ -27,6 +27,16 @@ venv/
 ENV/
 env/
 
+# MobileNetV2 dataset folders
+ai-module/dataset/accident/
+ai-module/dataset/normal/
+ai-module/dataset/traffic_jam/
+
+#keep folder structure 
+!ai-module/dataset/accident/.gitkeep
+!ai-module/dataset/normal/.gitkeep    
+!ai-module/dataset/traffic_jam/.gitkeep
+
 # Database
 *.db
 *.sqlite

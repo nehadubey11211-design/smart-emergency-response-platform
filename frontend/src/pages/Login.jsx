@@ -1,4 +1,4 @@
-﻿/**
+/**
  * FILE: frontend/src/pages/Login.jsx
  * =========================================
  * Login Page — Controlled Form with JWT Auth
@@ -128,6 +128,7 @@ const cx = {
 
 export default function Login() {
   const navigate = useNavigate();
+  const navigateToDashboard = () => navigate("/dashboard", { replace: true });
 
   const [form,         setForm]         = useState(emptyForm());
   const [showPw,       setShowPw]       = useState(false);
@@ -197,6 +198,7 @@ export default function Login() {
     } catch (err) {
       setError(err?.response?.data?.detail || err?.message || "Something went wrong");
     } finally {
+      
       setLoading(false);
     }
   }, [canSubmit, navigate]);

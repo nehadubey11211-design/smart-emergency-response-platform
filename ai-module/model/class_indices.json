@@ -1,0 +1,5 @@
+{
+  "accident": 0,
+  "normal": 1,
+  "traffic_jam": 2
+}
