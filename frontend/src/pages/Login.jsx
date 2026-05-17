@@ -1,4 +1,4 @@
-﻿// Using React Router for navigation
+﻿// FILE: frontend/src/pages/Login.jsx
 /**
  * FILE: frontend/src/pages/Login.jsx
  * =========================================
@@ -25,614 +25,372 @@
  *   For production, prefer httpOnly cookies with CSRF protection and
  *   same-origin CORS setup.
  */
-
 import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Loader2, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, ArrowLeft } from "lucide-react";
 import { login, register } from "../services/api";
+import Button from "../components/Button.jsx";
 
-
-
-
-// ─── Tailwind class helpers (centralised, no duplication) ────────────────────
-
-function getRootClasses(dark) {
-  return dark
-    ? "min-h-screen flex items-center justify-center relative px-4 bg-gradient-to-br from-navy-900 via-blue-900 to-slate-900 text-white animate-gradient"
-    : "min-h-screen flex items-center justify-center relative px-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-slate-900";
-}
-
-function getCardClasses(dark) {
-  return dark
-    ? "w-full max-w-md rounded-3xl p-6 shadow-2xl shadow-black/20 bg-white/5 backdrop-blur-xl border border-blue-400/20 backdrop-blur-xl border border-white/20 animate-fadeInUp"
-    : "w-full max-w-md rounded-3xl p-6 shadow-2xl shadow-slate-300/20 bg-white/80 backdrop-blur-xl border border-white/30 animate-fadeInUp";
-}
-
-function getInputClasses(dark) {
-  return dark
-    ? "w-full rounded-xl border border-slate-600/50 bg-slate-950/30 backdrop-blur-sm px-4 py-3 mt-3 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20"
-    : "w-full rounded-xl border border-slate-300/50 bg-white/30 backdrop-blur-sm px-4 py-3 mt-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20";
-}
-
-function getSwitchButtonClasses(active, dark) {
-  const base = "rounded-xl px-4 py-2 text-sm font-medium transition";
-  if (active) return `${base} bg-blue-600 text-white`;
-  return dark
-    ? `${base} bg-slate-700 text-slate-200 hover:bg-slate-600`
-    : `${base} bg-slate-200 text-slate-700 hover:bg-slate-300`;
-}
-
-/** Only used when VITE_ENABLE_SOCIAL_LOGIN=true */
-function getSocialButtonClasses(dark) {
-  return dark
-    ? "w-full rounded-xl border border-slate-500 bg-transparent px-4 py-3 text-sm text-slate-100 transition hover:border-slate-400 hover:bg-slate-950"
-    : "w-full rounded-xl border border-slate-300 bg-transparent px-4 py-3 text-sm text-slate-900 transition hover:border-slate-400 hover:bg-slate-50";
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function ThemeToggle({ dark, toggle }) {
-  return (
-    <button
-      type="button"
-      className={`absolute right-5 top-5 rounded-full border px-3 py-2 text-base transition ${
-        dark
-          ? "border-slate-500 bg-slate-900/70 text-white hover:bg-slate-800"
-          : "border-slate-300 bg-white/90 text-slate-900 hover:bg-slate-200"
-      }`}
-      onClick={toggle}
-      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      {dark ? "🌞" : "🌙"}
-    </button>
-  );
-}
-
-/** Only used when VITE_ENABLE_SOCIAL_LOGIN=true */
-function SocialLoginSection({ dark }) {
-  const cls = getSocialButtonClasses(dark);
-  return (
-    <>
-      <div className="text-center my-4 text-xs text-slate-500">OR</div>
-      <div className="space-y-3">
-        <button type="button" disabled className={`${cls} opacity-50 cursor-not-allowed`}>
-          🔴 Continue with Google (Coming Soon)
-        </button>
-        <button type="button" disabled className={`${cls} opacity-50 cursor-not-allowed`}>
-          🔵 Continue with Facebook (Coming Soon)
-        </button>
-      </div>
-    </>
-  );
-}
-
-// ─── Validation ───────────────────────────────────────────────────────────────
-
-const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-/**
- * Returns an error string or "" if valid.
- * Called BEFORE setLoading(true) so a failed validation
- * never leaves the spinner running.
- */
-function validateLogin(form) {
-  if (!form.email.trim() || !form.password.trim()) return "Email and password required";
-  if (!isValidEmail(form.email)) return "Enter a valid email address";
-  return "";
-}
-
-function validateSignup(form) {
-  if (!form.name.trim() || !form.mobile.trim() || !form.email.trim() || !form.password.trim())
-    return "All fields required";
-  if (form.name.trim().length < 2) return "Enter your full name";
-  if (!isValidEmail(form.email)) return "Enter a valid email address";
-  if (!/^[6-9]\d{9}$/.test(form.mobile)) return "Enter a valid 10-digit mobile number";
-  if (form.password.trim().length < 8) return "Password must be at least 8 characters";
-  return "";
-}
-
-// ─── Safe session helpers ─────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const ALLOWED_USER_FIELDS = ["id", "name", "email", "role"];
+const COOLDOWN_MS = 800;
 
-function sanitiseUser(raw) {
+const PW_STRENGTHS = [
+  { score: 0, label: "",            color: "" },
+  { score: 1, label: "Weak",        color: "text-red-400" },
+  { score: 2, label: "Fair",        color: "text-orange-400" },
+  { score: 3, label: "Good",        color: "text-yellow-400" },
+  { score: 4, label: "Strong",      color: "text-lime-400" },
+  { score: 5, label: "Very Strong", color: "text-green-400" },
+];
+
+const emptyForm = (keepEmail = "") => ({ name: "", mobile: "", email: keepEmail, password: "", operatorId: "" });
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+const validateLogin = ({ email, password }) => {
+  if (!email.trim() || !password.trim()) return "Email and password required";
+  if (!isValidEmail(email)) return "Enter a valid email address";
+  return "";
+};
+
+const validateSignup = ({ name, mobile, email, password }) => {
+  if (!name.trim() || !mobile.trim() || !email.trim() || !password.trim()) return "All fields required";
+  if (name.trim().length < 2) return "Enter your full name";
+  if (!isValidEmail(email)) return "Enter a valid email address";
+  if (!/^[6-9]\d{9}$/.test(mobile)) return "Enter a valid 10-digit mobile number";
+  if (password.trim().length < 8) return "Password must be at least 8 characters";
+  return "";
+};
+
+const sanitiseUser = (raw) => {
   if (!raw || typeof raw !== "object") return {};
   return ALLOWED_USER_FIELDS.reduce((acc, key) => {
     if (Object.prototype.hasOwnProperty.call(raw, key)) acc[key] = raw[key];
     return acc;
   }, {});
-}
+};
 
-function storeSession(token, user, rememberMe = false) {
-  // localStorage only when "Remember me" is explicitly checked.
-  // For production prefer httpOnly cookies with CSRF + same-origin CORS.
-  const storage = rememberMe ? localStorage : sessionStorage;
-  storage.setItem("token", token);
-  storage.setItem("user", JSON.stringify(sanitiseUser(user)));
-}
+const storeSession = (token, user, rememberMe = false) => {
+  const s = rememberMe ? localStorage : sessionStorage;
+  s.setItem("token", token);
+  s.setItem("user", JSON.stringify(sanitiseUser(user)));
+};
 
-// ─── Password strength calculator ────────────────────────────────────────────
-// Semantic severity colours — intentionally theme-independent.
-// Dark-mode empty segment colours are handled in getStrengthSegmentColor().
-const PASSWORD_STRENGTHS = [
-  { score: 0, label: "", color: "" },
-  { score: 1, label: "Weak",        color: "text-red-400"    },
-  { score: 2, label: "Fair",        color: "text-orange-400" },
-  { score: 3, label: "Good",        color: "text-yellow-400" },
-  { score: 4, label: "Strong",      color: "text-lime-400"   },
-  { score: 5, label: "Very Strong", color: "text-green-400"  },
-];
+const getPwStrength = (pw) => {
+  if (!pw) return PW_STRENGTHS[0];
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (pw.length >= 12) s++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
+  if (/\d/.test(pw)) s++;
+  if (/[^\w\s]/.test(pw)) s++;
+  return PW_STRENGTHS[s];
+};
 
-function getPasswordStrength(password) {
-  if (!password) return PASSWORD_STRENGTHS[0];
-  let score = 0;
-  if (password.length >= 8)  score++;
-  if (password.length >= 12) score++;
-  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
-  if (/\d/.test(password))        score++;
-  if (/[^\w\s]/.test(password))   score++;
-  return PASSWORD_STRENGTHS[score];
-}
-
-function getStrengthSegmentColor(score, seg, dark) {
-  if (seg > score)  return dark ? "bg-slate-700" : "bg-slate-300"; // empty segment
-  if (score <= 1)   return "bg-red-400";
-  if (score <= 2)   return "bg-orange-400";
-  if (score <= 3)   return "bg-yellow-400";
-  if (score <= 4)   return "bg-lime-400";
+const segColor = (score, seg, dark) => {
+  if (seg > score) return dark ? "bg-slate-700" : "bg-slate-300";
+  if (score <= 1) return "bg-red-400";
+  if (score <= 2) return "bg-orange-400";
+  if (score <= 3) return "bg-yellow-400";
+  if (score <= 4) return "bg-lime-400";
   return "bg-green-400";
-}
-
-// ─── Rate-limit hook: prevents rapid re-submissions ──────────────────────────
-
-// 800ms — long enough to block accidental double-clicks
-// (typical double-click threshold ~500ms) but short enough
-// to not frustrate users who retry after a fast validation error.
-const COOLDOWN_MS = 800;
+};
 
 function useSubmitCooldown() {
-  const lastSubmit = useRef(0);
+  const last = useRef(0);
   return useCallback(() => {
     const now = Date.now();
-    if (now - lastSubmit.current < COOLDOWN_MS) return false;
-    lastSubmit.current = now;
+    if (now - last.current < COOLDOWN_MS) return false;
+    last.current = now;
     return true;
   }, []);
 }
 
-// ─── Default form state factory ───────────────────────────────────────────────
+// ─── Theme class builders ─────────────────────────────────────────────────────
 
-const emptyForm = (keepEmail = "") => ({
-  name: "",
-  mobile: "",
-  email: keepEmail,
-  password: "",
-});
+const cx = {
+  root: (d) => d
+    ? "min-h-screen flex items-center justify-center relative px-3 bg-gradient-to-br from-navy-900 via-blue-900 to-slate-900 text-white animate-gradient"
+    : "min-h-screen flex items-center justify-center relative px-3 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-slate-900",
+  card: (d) => d
+    ? "w-full max-w-md rounded-2xl p-6 shadow-2xl shadow-black/20 bg-white/5 backdrop-blur-xl border border-white/20 animate-fadeInUp"
+    : "w-full max-w-md rounded-2xl p-6 shadow-2xl shadow-slate-300/20 bg-white/80 backdrop-blur-xl border border-white/30 animate-fadeInUp",
+  input: (d) => d
+    ? "w-full rounded-lg border border-slate-600/50 bg-slate-950/30 backdrop-blur-sm px-4 py-3 mt-3 text-sm text-white placeholder:text-slate-400 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20"
+    : "w-full rounded-lg border border-slate-300/50 bg-white/30 backdrop-blur-sm px-4 py-3 mt-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-brand-blue focus:ring focus:ring-brand-blue/20",
+  muted: (d) => d ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900",
+};
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Login() {
   const navigate = useNavigate();
 
-  const navigateToDashboard = useCallback(
-    () => navigate("/dashboard", { replace: true }),
-    [navigate]
-  );
+  const [form,         setForm]         = useState(emptyForm());
+  const [showPw,       setShowPw]       = useState(false);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState("");
+  const [success,      setSuccess]      = useState("");
+  const [isSignup,     setIsSignup]     = useState(false);
+  const [dark,         setDark]         = useState(true);
+  const [rememberMe,   setRememberMe]   = useState(false);
+  const [submitted,    setSubmitted]    = useState(false);
+  const [selectedRole, setSelectedRole] = useState("user");
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  const [form,      setForm]      = useState(emptyForm());
-  const [showPw,    setShowPw]    = useState(false);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState("");
-  const [success,   setSuccess]   = useState("");
-  const [isSignup,  setIsSignup]  = useState(false);
-  const [dark,      setDark]      = useState(true);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [pwFocused, setPwFocused] = useState(false);
+  const formRef      = useRef(emptyForm());
+  const isSignupRef  = useRef(false);
+  const rememberRef  = useRef(false);
+  const canSubmit    = useSubmitCooldown();
 
-  // ── Refs ──────────────────────────────────────────────────────────────────
-  const formRef = useRef(emptyForm()); 
+  const clearFeedback = useCallback(() => { setError(""); setSuccess(""); setSubmitted(false); }, []);
 
-  const isSignupRef = useRef(false);
-  const rememberMeRef = useRef(false);
+  const handleChange = useCallback((e) => {
+    clearFeedback();
+    setForm((prev) => { const next = { ...prev, [e.target.name]: e.target.value }; formRef.current = next; return next; });
+  }, [clearFeedback]);
 
-  const canSubmit = useSubmitCooldown();
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  const handleMobileChange = useCallback((e) => {
+    clearFeedback();
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+    setForm((prev) => { const next = { ...prev, mobile: digits }; formRef.current = next; return next; });
+  }, [clearFeedback]);
 
   const switchMode = useCallback((toSignup) => {
-    setIsSignup((currentMode) => {
-      if (toSignup === currentMode) return currentMode; // no-op guard
+    setIsSignup((cur) => {
+      if (toSignup === cur) return cur;
       isSignupRef.current = toSignup;
-      setError("");
-      setSuccess("");
-      setShowPw(false);
-      setRememberMe(false);
-      rememberMeRef.current = false;
-      setSubmitted(false);
-      setForm((prev) => {
-        const next = emptyForm(prev.email);
-        formRef.current = next;
-        return next;
-      });
+      setError(""); setSuccess(""); setShowPw(false); setSubmitted(false);
+      setRememberMe(false); rememberRef.current = false;
+      setForm((prev) => { const next = emptyForm(prev.email); formRef.current = next; return next; });
       return toSignup;
     });
   }, []);
 
-  const handleChange = useCallback((e) => {
-    setError("");
-    setSuccess("");
-    setSubmitted(false);
-    setForm((prev) => {
-      const next = { ...prev, [e.target.name]: e.target.value };
-      formRef.current = next;
-      return next;
-    });
-  }, []);
-
-  const handleMobileChange = useCallback((e) => {
-    setError("");
-    setSuccess("");
-    setSubmitted(false);
-    const digitsOnly = e.target.value
-      .replace(/\D/g, "").slice(0, 10);
-    setForm((prev) => {
-      const next = { ...prev, mobile: digitsOnly };
-      formRef.current = next;
-      return next;
-    });
-  }, []);
-
-  const handleSignup = useCallback(async () => {
-    const { data } = await register(formRef.current);
-    return data;
-  }, []);
-
-  const handleLogin = useCallback(async () => {
-    const { data } = await login({
-      email:    formRef.current.email.trim(),
-      password: formRef.current.password.trim(),
-    });
-
-    const token = data.access_token || data.token;
-    if (!token) throw new Error("Invalid response from server");
-
-    storeSession(token, data.user, rememberMeRef.current);
-    setRememberMe(false);
-    rememberMeRef.current = false;
-    navigateToDashboard();
-  }, [navigateToDashboard]);
-
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
+    if (!canSubmit()) { setError("Please wait before submitting again."); return; }
 
-    if (!canSubmit()) {
-      setError("Please wait before submitting again.");
-      return;
-    }
+    const signup = isSignupRef.current;
+    const valErr = signup ? validateSignup(formRef.current) : validateLogin(formRef.current);
+    if (valErr) { setError(valErr); setSubmitted(true); return; }
 
-    const currentIsSignup = isSignupRef.current;
-
-    const validationError = currentIsSignup
-      ? validateSignup(formRef.current)
-      : validateLogin(formRef.current);
-
-    if (validationError) {
-      setError(validationError);
-      setSubmitted(true);
-      return; // loading is still false — safe exit
-    }
-
-    setLoading(true);
-    setError("");
-    setSuccess("");
-    setSubmitted(false);
+    setLoading(true); setError(""); setSuccess(""); setSubmitted(false);
 
     try {
-      if (currentIsSignup) {
-        await handleSignup();
-
+      if (signup) {
+        await register(formRef.current);
         setSuccess("Account created! Please sign in.");
-        setShowPw(false);
-        setIsSignup(false);
-        isSignupRef.current = false; 
-        setRememberMe(false);
-        rememberMeRef.current = false;        
-        setSubmitted(false);
-        setForm((prev) => {
-          // Preserve email so the user can log in immediately
-          const next = emptyForm(prev.email);
-          formRef.current = next;
-          return next;
-        });
+        setShowPw(false); setIsSignup(false); isSignupRef.current = false;
+        setRememberMe(false); rememberRef.current = false; setSubmitted(false);
+        setForm((prev) => { const next = emptyForm(prev.email); formRef.current = next; return next; });
       } else {
-        await handleLogin();
-        setSubmitted(false);
+        const { data } = await login({ email: formRef.current.email.trim(), password: formRef.current.password.trim() });
+        const token = data.access_token || data.token;
+        if (!token) throw new Error("Invalid response from server");
+        storeSession(token, data.user, rememberRef.current);
+        setRememberMe(false); rememberRef.current = false;
+        navigate("/dashboard", { replace: true });
       }
     } catch (err) {
       setError(err?.response?.data?.detail || err?.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
-  }, [canSubmit, handleSignup, handleLogin]);
+  }, [canSubmit, navigate]);
 
-  // ── Derived values ────────────────────────────────────────────────────────
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const inputCls   = cx.input(dark);
+  const pwStrength = isSignup && form.password ? getPwStrength(form.password) : null;
 
-  const pageClasses  = getRootClasses(dark);
-  const cardClasses  = getCardClasses(dark);
-  const inputClasses = getInputClasses(dark);
-
-  const pwStrength = isSignup && form.password
-    ? getPasswordStrength(form.password)
-    : null;
-
-  const signInTabClasses = getSwitchButtonClasses(!isSignup, dark);
-  const signUpTabClasses = getSwitchButtonClasses(isSignup, dark);
-
-  const toggleDark = useCallback(() => setDark((d) => !d), []);
-
-  // ── Field validation states ────────────────────────────────────────────────
   const nameInvalid    = submitted && !form.name.trim();
   const mobileInvalid  = submitted && !/^[6-9]\d{9}$/.test(form.mobile);
-  const emailInvalid   = submitted &&
-    (!form.email.trim() || !isValidEmail(form.email));
-  const passwordInvalid = submitted && (
-    isSignup
-      ? form.password.trim().length < 8
-      : !form.password.trim()
-  );
+  const emailInvalid   = submitted && (!form.email.trim() || !isValidEmail(form.email));
+  const pwInvalid      = submitted && (isSignup ? form.password.trim().length < 8 : !form.password.trim());
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const tabBtn = (active) =>
+    `flex-1 py-3 rounded-xl text-sm font-semibold transition-all duration-300 border ${
+      active
+        ? "bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.25)]"
+        : "bg-transparent text-white border-transparent hover:bg-white/10"
+    }`;
 
   return (
-    <div className={pageClasses} style={{
-      backgroundImage: 'url("/backgrounds/ai-emergency-background.png")',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat'
-    }}>
-      <div className="absolute left-5 top-5">
-        <img
-          src="/logo.png"
-          alt="AI Smart Detection Logo"
-          className="h-12 w-auto"
-        />
-      </div>
-      <ThemeToggle dark={dark} toggle={toggleDark} />
+    <div className={cx.root(dark)}>
+      {/* Video background */}
+      <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover z-0">
+        <source src="/backgrounds/emergency-background-video.mp4" type="video/mp4" />
+        <div style={{ backgroundImage: 'url("/backgrounds/ai-emergency-background.png")', backgroundSize: "cover", backgroundPosition: "center", position: "absolute", inset: 0, width: "90%", height: "100%" }} />
+      </video>
 
-      <div className={cardClasses}>
-        <h1 className="text-center text-2xl font-semibold tracking-tight">
-          AI ACCIDENT SYSTEM
-        </h1>
-        <h3 className="mt-2 text-center text-sm font-medium text-slate-400">
+      <div className="absolute inset-0 bg-black/4 z-10" />
+
+      {/* Logo */}
+      <div className="absolute left-5 top-4 z-20">
+        <img src="/logo.png" alt="AI Smart Detection Logo" className="h-12 w-auto" />
+      </div>
+
+      {/* Theme toggle */}
+      <Button variant="ghost" size="sm" onClick={() => setDark((d) => !d)}
+        className="absolute right-5 top-5 rounded-full z-20"
+        aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}>
+        {dark ? "☀️" : "🌙"}
+      </Button>
+      {/* Back Button */}
+<button
+  type="button"
+  onClick={() => navigate("/")}
+  className="absolute left-5 top-5 z-20 rounded-full border border-slate-500 bg-slate-900/70 px-3 py-2 text-white transition hover:bg-slate-800/50"
+  aria-label="Go Back"
+>
+  <ArrowLeft size={18} />
+</button>
+
+      <div className={`${cx.card(dark)} relative z-20`}>
+        <h1 className="text-center text-lg font-semibold tracking-tight">AI ACCIDENT SYSTEM</h1>
+        <h3 className="mt-1 text-center text-xs font-medium text-slate-400">
           {isSignup ? "Create Account" : "Welcome Back"}
         </h3>
 
         <form onSubmit={handleSubmit} noValidate aria-busy={loading}>
 
-          {/* ── Email field (both login and signup) ─────────────────────── */}
+          {/* Email */}
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input
-              id={isSignup ? "signup-email" : "login-email"}
-              type="email"
-              name="email"
-              placeholder="Email Address"
-              aria-label="Email address"
-              aria-invalid={emailInvalid ? "true" : undefined}
-              aria-errormessage={emailInvalid ? "form-error" : undefined}
-              autoComplete="email"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              value={form.email}
-              onChange={handleChange}
-              className={`${inputClasses} pl-10`}
-            />
+            <input type="email" name="email" placeholder="Email Address" aria-label="Email address"
+              aria-invalid={emailInvalid || undefined} autoComplete="email" autoCapitalize="none"
+              autoCorrect="off" spellCheck={false} value={form.email} onChange={handleChange}
+              className={`${inputCls} pl-12`} />
           </div>
 
-          {/* ── Signup-only fields ─────────────────────────────────────── */}
+          {/* Signup-only fields */}
           {isSignup && (
             <>
-              <input
-                id="signup-name"
-                type="text"
-                name="name"
-                placeholder="Full Name"
-                aria-label="Full name"
-                aria-invalid={nameInvalid ? "true" : undefined}
-                aria-errormessage={nameInvalid ? "form-error" : undefined}
-                autoComplete="name"
-                autoCapitalize="words"
-                spellCheck={false}
-                value={form.name}
-                onChange={handleChange}
-                className={inputClasses}
-              />
+              <input type="text" name="name" placeholder="Full Name" aria-label="Full name"
+                aria-invalid={nameInvalid || undefined} autoComplete="name" autoCapitalize="words"
+                spellCheck={false} value={form.name} onChange={handleChange} className={inputCls} />
 
-              <input
-                id="signup-mobile"
-                type="tel"
-                name="mobile"
-                placeholder="Mobile Number"
-                aria-label="Mobile number"
-                aria-invalid={mobileInvalid ? "true" : undefined}
-                aria-errormessage={mobileInvalid ? "form-error" : undefined}
-                autoComplete="tel"
-                inputMode="numeric"
-                maxLength={10}
-                value={form.mobile}
-                onChange={handleMobileChange}
-                className={inputClasses}
-              />
+              <input type="tel" name="mobile" placeholder="Mobile Number" aria-label="Mobile number"
+                aria-invalid={mobileInvalid || undefined} autoComplete="tel" inputMode="numeric"
+                maxLength={10} value={form.mobile} onChange={handleMobileChange} className={inputCls} />
             </>
           )}
 
-          {/* ── Password field (both login and signup) ─────────────────────── */}
+          {/* Password */}
           <div className="relative mt-3">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input
-              id={isSignup ? "signup-password" : "login-password"}
-              type={showPw ? "text" : "password"}
-              name="password"
-              placeholder="Password"
-              aria-label="Password"
-              aria-describedby={isSignup ? "password-strength" : undefined}
-              aria-invalid={passwordInvalid ? "true" : undefined}
-              aria-errormessage={passwordInvalid ? "form-error" : undefined}
-              autoComplete={isSignup ? "new-password" : "current-password"}
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              value={form.password}
-              onChange={handleChange}
-              className={`${inputClasses} !mt-0 pl-10 pr-10`}
-            />
-
-            <button
-              type="button"
-              aria-label={showPw ? "Hide password" : "Show password"}
+            <input type={showPw ? "text" : "password"} name="password" placeholder="Password"
+              aria-label="Password" aria-describedby={isSignup ? "pw-strength" : undefined}
+              aria-invalid={pwInvalid || undefined} autoComplete={isSignup ? "new-password" : "current-password"}
+              autoCapitalize="none" autoCorrect="off" spellCheck={false} value={form.password}
+              onChange={handleChange} className={`${inputCls} !mt-0 pl-12 pr-12`} />
+            <button type="button" aria-label={showPw ? "Hide password" : "Show password"}
               onClick={() => setShowPw((v) => !v)}
-              className={`absolute right-3 top-1/2 -translate-y-1/2 transition ${
-                dark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-900"
-                }`}
-            >
+              className={`absolute right-3 top-1/2 -translate-y-1/2 transition ${cx.muted(dark)}`}>
               {showPw ? <Eye size={16} /> : <EyeOff size={16} />}
             </button>
           </div>
 
-          {/* ── Password strength bar ──────────────────────────────────── */}
+          {/* Password strength */}
+          {isSignup && pwStrength && (
+            <div id="pw-strength" aria-live="polite">
+              <div className="flex gap-1 mb-1 mt-2">
+                {[1, 2, 3, 4, 5].map((seg) => (
+                  <div key={seg} className={`h-1 flex-1 rounded-full transition-all ${segColor(pwStrength.score, seg, dark)}`} />
+                ))}
+              </div>
+              <p className={`text-xs font-medium ${pwStrength.color}`}>Password strength: {pwStrength.label}</p>
+            </div>
+          )}
+
+          {/* Role selection */}
           {isSignup && (
-            <div id="password-strength" aria-live="polite">
-              {pwStrength && (
-                <>
-                  <div className="flex gap-1 mb-1 mt-2">
-                    {[1, 2, 3, 4, 5].map((seg) => (
-                      <div
-                        key={seg}
-                        className={`h-1 flex-1 rounded-full transition-all ${
-                          getStrengthSegmentColor(pwStrength.score, seg, dark)
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <p className={`text-xs font-medium ${pwStrength.color}`}>
-                    Password strength: {pwStrength.label}
-                  </p>
-                </>
+            <div className="mt-4">
+              <p className="text-sm text-slate-300 mb-2">Register as</p>
+              <div className="flex gap-3">
+                {[["user", "As User", "blue"], ["operator", "As Operator", "red"]].map(([role, label, color]) => (
+            <button
+              key={role}
+              type="button"
+              onClick={() => setSelectedRole(role)}
+              className={`flex-1 py-3 rounded-xl border text-white font-medium backdrop-blur-md transition-all duration-300 ${
+                selectedRole === role
+                  ? role === "user"
+                    ? "bg-green-500 border-green-400"
+                    : "bg-red-500 border-red-400"
+                    : "bg-white/10 border-white/20 hover:bg-white/20"
+                }`}
+                  >
+               {label}
+            </button>            
+                ))}
+              </div>
+              {selectedRole === "operator" && (
+                <input type="text" name="operatorId" placeholder="Enter Operator ID"
+                  value={form.operatorId} onChange={handleChange} className={`${inputCls} mt-4`} />
               )}
             </div>
           )}
 
-          {/* ── Feedback messages ──────────────────────────────────────── */}
-          <p
-            id="form-error"
-            role="alert"
-            aria-live="assertive"
-            aria-hidden={!error}
-            className="mt-3 text-sm text-red-400"
-            style={{ display: error ? undefined : "none" }}
-          >
+          {/* Feedback */}
+          <p id="form-error" role="alert" aria-live="assertive" aria-hidden={!error}
+            className="mt-3 text-sm text-red-400" style={{ display: error ? undefined : "none" }}>
             {error}
           </p>
-          {success && (
-            <p role="status" aria-live="polite" className="mt-3 text-sm text-green-400">
-              {success}
-            </p>
-          )}
+          {success && <p role="status" aria-live="polite" className="mt-3 text-sm text-green-400">{success}</p>}
 
-          {/* ── Remember me (LEFT) + Forgot Password (RIGHT) — same row ── */}
+          {/* Remember me + Forgot password */}
           {!isSignup && (
             <div className="mt-4 flex items-center justify-between gap-2">
-
-              {/* Left: Remember me checkbox */}
-              <label
-                htmlFor="remember-me"
-                className={`flex items-center gap-2 text-xs cursor-pointer transition ${
-                  dark ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <input
-                  id="remember-me"
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => {
-                    setRememberMe(e.target.checked);
-                    rememberMeRef.current = e.target.checked;
-                  }}
-                  className="rounded border-slate-400"
-                />
+              <label htmlFor="remember-me" className={`flex items-center gap-2 text-xs cursor-pointer transition ${dark ? "text-slate-300 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}>
+                <input id="remember-me" type="checkbox" checked={rememberMe}
+                  onChange={(e) => { setRememberMe(e.target.checked); rememberRef.current = e.target.checked; }}
+                  className="rounded border-slate-400" />
                 <span>Remember me</span>
               </label>
-
-              {/* Right: Forgot Password */}
-              <a
-                href="#"
-                className={`text-xs transition ${
-                  dark ? "text-slate-400 hover:text-white" : "text-slate-600 hover:text-slate-900"
-                }`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate("/forgot-password");
-                }}
-              >
+              <a href="#" onClick={(e) => { e.preventDefault(); navigate("/forgot-password"); }}
+                className={`text-xs transition ${dark ? "text-slate-400 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}>
                 Forgot Password?
               </a>
-
             </div>
           )}
 
-          {/* ── Toggle buttons row (both modes) ──────────────────────── */}
-          <div className={`flex gap-5 mt-4 ${isSignup ? "justify-end" : "justify-center"}`}>
-            <button
-              type="button"
-              className={signInTabClasses}
-              disabled={loading}
-              onClick={() => switchMode(false)}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              className={signUpTabClasses}
-              disabled={loading}
-              onClick={() => switchMode(true)}
-            >
-              Sign Up
-            </button>
+          {/* Sign In / Sign Up tabs */}
+          <div className="flex gap-3 mt-6 p-1 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl">
+            <button type="button" disabled={loading} onClick={() => switchMode(false)} className={tabBtn(!isSignup)}>Sign In</button>
+            <button type="button" disabled={loading} onClick={() => switchMode(true)}  className={tabBtn(isSignup)}>Sign Up</button>
           </div>
 
-          {/* ── Submit button ──────────────────────────────────────────── */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-4 w-full rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {loading ? (
-              <Loader2 className="animate-spin mx-auto" size={18} />
-            ) : isSignup ? (
-              "SIGN UP"
-            ) : (
-              "SIGN IN"
-            )}
-          </button>
-
+          {/* Submit */}
+          <Button type="submit" size="lg" loading={loading} fullWidth
+            className={`mt-6 rounded-xl border transition-all duration-200 ${
+              isSignup
+                ? "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 border-cyan-400/30 shadow-[0_0_25px_rgba(34,211,238,0.35)] text-white"
+                : "bg-gradient-to-r from-blue-400 to-blue-500 hover:from-red-400 hover:to-blue-500 border-pink-400/30 shadow-[0_0_25px_rgba(168,85,247,0.35)] text-white"
+            }`}>
+            {isSignup ? "Create Account" : "Continue"}
+          </Button>
         </form>
 
-        {/* ── Secured connection note ─────────────────────────────────── */}
         <div className="mt-4 text-center">
-          <p className={`text-xs transition ${
-            dark ? "text-slate-500" : "text-slate-400"
-          }`}>
-            🔒 Secured Connection
-          </p>
+          <p className={`text-xs transition ${dark ? "text-slate-500" : "text-slate-400"}`}>🔒 Secured Connection</p>
         </div>
 
-
-        
         {import.meta.env.VITE_ENABLE_SOCIAL_LOGIN === "true" && (
-          <SocialLoginSection dark={dark} />
+          <>
+            <div className="text-center my-4 text-xs text-slate-500">OR</div>
+            <div className="space-y-3">
+              {[["🔴", "Google"], ["🔵", "Facebook"]].map(([icon, name]) => (
+                <button key={name} type="button" disabled
+                  className={`w-full rounded-xl border px-4 py-3 text-sm opacity-50 cursor-not-allowed transition ${dark ? "border-slate-500 bg-transparent text-slate-100 hover:border-slate-400 hover:bg-slate-950" : "border-slate-300 bg-transparent text-slate-900 hover:border-slate-400 hover:bg-slate-50"}`}>
+                  {icon} Continue with {name} (Coming Soon)
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </div>

@@ -64,7 +64,8 @@ import History    from "./pages/History.jsx";
  * @param {{ children: React.ReactNode }} props
  */
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("token") ||
+  sessionStorage.getItem("token")
 
   if (!token) {
     /**
@@ -99,7 +100,7 @@ export default function App() {
      * Everything that uses useNavigate(), useParams(), Link, etc. must be
      * inside a Router.
      */
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
 
         {/* ── Public Routes (no auth required) ──────────────────────────── */}

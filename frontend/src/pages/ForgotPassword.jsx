@@ -1,9 +1,6 @@
-import { useState, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Loader2, Mail, Lock, ArrowLeft, Shield } from "lucide-react";
-import { sendResetOtp, verifyResetOtp, resetPassword } from "../services/api";
 
 /**
+ *  FILE: frontend/src/components/ForgotPassword.jsx
  * Forgot Password Page - Professional AI Emergency System
  * ========================================================
  * Multi-step password recovery flow with OTP verification
@@ -13,6 +10,12 @@ import { sendResetOtp, verifyResetOtp, resetPassword } from "../services/api";
  * 2. Verify OTP → Show password fields  
  * 3. Reset password → Redirect to login
  */
+
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Loader2, Mail, Lock, ArrowLeft, Shield } from "lucide-react";
+import { sendResetOtp, verifyResetOtp, resetPassword } from "../services/api";
+
 
 // ─── Tailwind class helpers (matching Login.jsx) ────────────────────────────
 
@@ -40,7 +43,7 @@ function ThemeToggle({ dark, toggle }) {
   return (
     <button
       type="button"
-      className={`absolute right-5 top-5 rounded-full border px-3 py-2 text-base transition ${
+      className={`fixed right-5 top-5 rounded-full border px-3 py-2 text-base transition z-50 ${
         dark
           ? "border-slate-500 bg-slate-900/70 text-white hover:bg-slate-800"
           : "border-slate-300 bg-white/90 text-slate-900 hover:bg-slate-200"
@@ -48,7 +51,7 @@ function ThemeToggle({ dark, toggle }) {
       onClick={toggle}
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
     >
-      {dark ? "🌞" : "🌙"}
+      {dark ? "☀️" : "🌙"}
     </button>
   );
 }
@@ -58,10 +61,9 @@ function BackButton({ onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="absolute left-5 top-5 rounded-full border px-3 py-2 text-base transition hover:bg-slate-800/50 border-slate-500 bg-slate-900/70 text-white"
-      aria-label="Go back to login"
+     className="fixed left-5 top-5 rounded-full border px-3 py-2 text-base transition hover:bg-slate-800/50 border-slate-500 bg-slate-900/70 text-white z-50"
     >
-      <ArrowLeft size={18} />
+      <ArrowLeft size={25} />
     </button>
   );
 }
@@ -88,9 +90,9 @@ export default function ForgotPassword() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Timer state
-  const [otpTimer, setOtpTimer] = useState(0);
-  const [resendDisabled, setResendDisabled] = useState(false);
-  
+    const [otpTimer, setOtpTimer] = useState(0);
+    const [resendDisabled, setResendDisabled] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
   // Refs
   const formRef = useRef({ emailOrMobile: "", otp: "", newPassword: "", confirmPassword: "" });
   const otpTimerRef = useRef(null);
@@ -100,25 +102,42 @@ export default function ForgotPassword() {
 
   // Toggle dark mode
   const toggleDark = useCallback(() => setDark((d) => !d), []);
+  
+  // OTP timer effect
+useEffect(() => {
+  if (otpTimer > 0) {
+    otpTimerRef.current = setTimeout(() => {
+      setOtpTimer((prev) => prev - 1);
+    }, 1000);
+  } else {
+    setResendDisabled(false);
+  }
+
+  return () => {
+    if (otpTimerRef.current) {
+      clearTimeout(otpTimerRef.current);
+    }
+  };
+}, [otpTimer]);
+
+// Resend cooldown effect
+useEffect(() => {
+  if (resendCooldown <= 0) return;
+
+  const t = setTimeout(() => {
+    setResendCooldown((prev) => prev - 1);
+  }, 1000);
+
+  return () => clearTimeout(t);
+}, [resendCooldown]);
 
   // Validation functions
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const isValidMobile = (mobile) => /^[6-9]\d{9}$/.test(mobile);
   const isValidOTP = (otp) => /^\d{6}$/.test(otp);
 
-  // Timer effect
-  useState(() => {
-    if (otpTimer > 0) {
-      otpTimerRef.current = setTimeout(() => {
-        setOtpTimer(otpTimer - 1);
-      }, 1000);
-    } else {
-      setResendDisabled(false);
-    }
-    return () => {
-      if (otpTimerRef.current) clearTimeout(otpTimerRef.current);
-    };
-  }, [otpTimer]);
+  
+ 
 
   // API handlers
   const handleSendOTP = async (e) => {
@@ -155,10 +174,7 @@ export default function ForgotPassword() {
       setSubmitted(false);
       setOtpTimer(300); // 5 minutes
       setResendDisabled(true);
-      
-      // Enable resend after 30 seconds
-      setTimeout(() => setResendDisabled(false), 30000);
-      
+      setResendCooldown(30);
     } catch (err) {
       setError(err?.response?.data?.detail || err?.message || "Failed to send OTP");
     } finally {
@@ -272,11 +288,13 @@ export default function ForgotPassword() {
 
       await sendResetOtp(payload);
       
-      setSuccess("OTP resent successfully!");
+     setSuccess("OTP resent successfully!");
       setOtpTimer(300);
       setResendDisabled(true);
+      setResendCooldown(30);
+
+    
       
-      setTimeout(() => setResendDisabled(false), 30000);
       
     } catch (err) {
       setError(err?.response?.data?.detail || err?.message || "Failed to resend OTP");
@@ -289,19 +307,52 @@ export default function ForgotPassword() {
   const inputClasses = getInputClasses(dark);
 
   return (
-    <div className={pageClasses} style={{
-      backgroundImage: 'url("/backgrounds/ai-emergency-background.png")',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat'
-    }}>
-      <BackButton onClick={() => navigate("/login")} />
-      <ThemeToggle dark={dark} toggle={toggleDark} />
+    
+  <div className={`${pageClasses} overflow-hidden`}>
 
-      <div className={cardClasses}>
+    {/* Video Background */}
+    <video
+      autoPlay
+      loop
+      muted
+      playsInline
+      className="absolute inset-0 w-full h-full object-cover z-0"
+    >
+      <source
+        src="/backgrounds/emergency-background-video.mp4"
+        type="video/mp4"
+      />
+
+      {/* Fallback Background Image */}
+      <div
+        style={{
+          backgroundImage:
+            'url("/backgrounds/ai-emergency-background.png")',
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+        }}
+      />
+    </video>
+
+    {/* Dark Overlay */}
+    <div className="absolute inset-0 bg-black/4 z-10" />
+      <div className="relative z-20">
+  <BackButton onClick={() => navigate("/login")} />
+</div>
+
+<div className="relative z-20">
+  <ThemeToggle dark={dark} toggle={toggleDark} />
+</div>
+
+      <div className={`${cardClasses} relative z-20`}>
         <div className="text-center mb-6">
-          <div className="mx-auto w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
-            <Shield className="text-red-500" size={32} />
+          <div className="mx-auto w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center mb-4">
+            <Shield className="text-blue-500" size={32} />
           </div>
           <h1 className="text-2xl font-bold text-white mb-2">
             Recover Your Account
@@ -332,7 +383,7 @@ export default function ForgotPassword() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-6 w-full rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+              className="mt-6 w-full rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {loading ? (
                 <Loader2 className="animate-spin mx-auto" size={18} />
@@ -370,7 +421,7 @@ export default function ForgotPassword() {
                 disabled={resendDisabled}
                 className="text-xs text-red-400 hover:text-red-300 disabled:text-slate-500 disabled:cursor-not-allowed"
               >
-                {resendDisabled ? `Resend in ${30 - (300 - otpTimer)}s` : "Resend OTP"}
+                {resendDisabled ? `Resend in ${resendCooldown}s` : "Resend OTP"}
               </button>
             </div>
 
@@ -476,3 +527,4 @@ export default function ForgotPassword() {
     </div>
   );
 }
+
