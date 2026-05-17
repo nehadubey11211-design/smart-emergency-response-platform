@@ -39,7 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.database.db import engine, Base, check_database_connection, is_neon
 from app.routes import auth, accidents, traffic, analytics
-
+from app.routes.ambulance_routes import router as ambulance_router   
 
 # ─── Application Lifespan ─────────────────────────────────────────────────────
 
@@ -138,6 +138,11 @@ app.include_router(
     tags=["📊 Analytics"],
 )
 
+app.include_router(
+    ambulance_router, 
+    prefix="/api",
+    tags=["🚑 Ambulances"],
+)
 
 # ─── Root Endpoints ───────────────────────────────────────────────────────────
 

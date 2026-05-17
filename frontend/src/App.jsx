@@ -48,8 +48,9 @@ import Login      from "./pages/Login.jsx";
 import Dashboard  from "./pages/Dashboard.jsx";
 import Analytics  from "./pages/Analytics.jsx";
 import History    from "./pages/History.jsx";
-
-
+import AmbulanceDashboard from "./pages/AmbulanceDashboard"; 
+import { AmbulanceSocketProvider } from "./context/AmbulanceSocketContext.jsx";
+import GlobalDispatchModal from "./components/GlobalDispatchModal";
 // ─── Auth Guard Component ─────────────────────────────────────────────────────
 
 /**
@@ -92,14 +93,18 @@ function ProtectedRoute({ children }) {
 // ─── Root App Component ───────────────────────────────────────────────────────
 
 export default function App() {
+  const storedAmbulanceId = Number(localStorage.getItem("ambulance_id")) || 1;
+
   return (
     /**
      * BrowserRouter provides the routing context to all descendant components.
      * Everything that uses useNavigate(), useParams(), Link, etc. must be
      * inside a Router.
      */
-    <BrowserRouter>
-      <Routes>
+    <AmbulanceSocketProvider ambulanceId={storedAmbulanceId}>
+      <BrowserRouter>
+        <GlobalDispatchModal />
+        <Routes>
 
         {/* ── Public Routes (no auth required) ──────────────────────────── */}
         <Route path="/"      element={<Home />} />
@@ -131,11 +136,22 @@ export default function App() {
           }
         />
 
+        <Route
+          path="/ambulance/:ambulanceId"
+          element={
+            <ProtectedRoute>
+              <AmbulanceDashboard />
+            </ProtectedRoute>
+          }
+        />
+
         {/* ── 404 Fallback ──────────────────────────────────────────────── */}
         {/* Any unknown URL redirects to the home page */}
         <Route path="*" element={<Navigate to="/" replace />} />
-
+        
       </Routes>
+      
     </BrowserRouter>
+    </AmbulanceSocketProvider>
   );
 }
