@@ -1,4 +1,42 @@
-// FILE: frontend/src/pages/Dashboard.jsx
+/**
+ * FILE: frontend/src/pages/Dashboard.jsx
+ * =============================================
+ * Operations Dashboard — Live Incident Feed
+ * =============================================
+ *
+ * This is a "container" component (also called a "smart" component).
+ * It owns the data-fetching logic and passes data down to presentational
+ * children (AlertCard, TrafficPanel, AnalyticsCard).
+ *
+ * CONCEPTS DEMONSTRATED:
+ *
+ *   1. Custom hooks for data fetching (useAccidents)
+ *      Component stays clean — it just reads { data, loading, refetch }
+ *
+ *   2. WebSocket integration
+ *      socketService.on() subscribes to real-time events.
+ *      The cleanup function (return () => ...) prevents memory leaks.
+ *
+ *   3. Derived state
+ *      Instead of storing filtered data in state, we compute it from
+ *      existing state on every render (filtered = data.filter(...)).
+ *      This avoids state synchronisation bugs.
+ *
+ *   4. useCallback for stable references
+ *      handleRefetch is memoised so it doesn't change on every render,
+ *      preventing unnecessary effect re-runs in children.
+ *
+ * DATA FLOW:
+ *   API → useAccidents → accidents state
+ *   WS  → NEW_ACCIDENT event → trigger refetch + show flash banner
+ *   Child components receive data as props and report changes via callbacks
+ *
+ * INTERVIEW TALKING POINT:
+ *   "The dashboard subscribes to WebSocket events and also polls via a
+ *   custom hook. When a WS event arrives, it triggers a refetch to get
+ *   the complete record (the WS payload is intentionally minimal to
+ *   reduce bandwidth)."
+ */
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { AlertTriangle, CheckCircle2, Clock, Activity, BellRing } from "lucide-react";
 

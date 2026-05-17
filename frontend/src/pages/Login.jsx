@@ -1,5 +1,4 @@
-﻿// FILE: frontend/src/pages/Login.jsx
-/**
+﻿/**
  * FILE: frontend/src/pages/Login.jsx
  * =========================================
  * Login Page — Controlled Form with JWT Auth

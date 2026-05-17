@@ -1,4 +1,24 @@
-// FILE: frontend/src/components/AnalyticsCard.jsx
+/**
+ * FILE: frontend/src/components/AnalyticsCard.jsx
+ * ======================================================
+ * KPI Summary Card — Reusable Metric Display
+ * ======================================================
+ *
+ * This is a generic "stat card" component used across Dashboard and Analytics.
+ * It demonstrates:
+ *   - Props with defaults (color, trend)
+ *   - Conditional rendering (only show trend icon if trend prop is provided)
+ *   - CSS custom properties for theming
+ *   - Absolute positioning for decorative elements
+ *
+ * Props:
+ *   title    {string}  — Metric label (e.g. "Incidents Today")
+ *   value    {any}     — The KPI value to display prominently
+ *   subtitle {string}  — Context text below the value
+ *   icon     {Component} — Lucide icon component
+ *   color    {string}  — Hex colour for accent and value text
+ *   trend    {string}  — "up" | "down" | "flat" | undefined
+ */
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 export default function AnalyticsCard({

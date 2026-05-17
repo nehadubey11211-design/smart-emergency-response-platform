@@ -1,8 +1,10 @@
 
 /**
- *  FILE: frontend/src/components/ForgotPassword.jsx
+ * FILE: frontend/src/components/ForgotPassword.jsx
+ * =========================================================
+ * Forgot Password Page — Multi-step Recovery Flow
+ * =========================================================
  * Forgot Password Page - Professional AI Emergency System
- * ========================================================
  * Multi-step password recovery flow with OTP verification
  * 
  * FLOW:
