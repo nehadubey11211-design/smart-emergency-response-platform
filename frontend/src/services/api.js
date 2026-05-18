@@ -132,6 +132,32 @@ export const register = (data) =>
 export const getMe = (token) =>
   api.get("/auth/me", { params: { token } });
 
+// ─── Password Reset API ─────────────────────────────────────────────────────
+
+/**
+ * POST /api/auth/send-reset-otp
+ * Send OTP for password reset
+ * @param {{ email?: string, mobile?: string }} payload
+ */
+export const sendResetOtp = (payload) =>
+  api.post("/auth/send-reset-otp", payload);
+
+/**
+ * POST /api/auth/verify-reset-otp
+ * Verify OTP for password reset
+ * @param {{ email?: string, mobile?: string, otp: string }} payload
+ */
+export const verifyResetOtp = (payload) =>
+  api.post("/auth/verify-reset-otp", payload);
+
+/**
+ * POST /api/auth/reset-password
+ * Reset password with verified OTP
+ * @param {{ email?: string, mobile?: string, otp: string, new_password: string }} payload
+ */
+export const resetPassword = (payload) =>
+  api.post("/auth/reset-password", payload);
+
 
 // ─── Accidents API ────────────────────────────────────────────────────────────
 

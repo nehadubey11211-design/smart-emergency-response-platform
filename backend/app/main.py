@@ -41,6 +41,16 @@ from app.database.db import engine, Base, check_database_connection, is_neon
 from app.routes import auth, accidents, traffic, analytics
 from app.routes.ambulance_routes import router as ambulance_router   
 
+from app.routes import password_reset
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+
+
+
 # ─── Application Lifespan ─────────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -98,6 +108,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ─── CORS Middleware ──────────────────────────────────────────────────────────
 # UNCHANGED from original — CORS is not affected by the database change.
@@ -143,6 +155,11 @@ app.include_router(
     prefix="/api",
     tags=["🚑 Ambulances"],
 )
+    password_reset.router,
+    prefix="/api/password",
+    tags=["🔐 Password Reset"],
+)
+
 
 # ─── Root Endpoints ───────────────────────────────────────────────────────────
 
