@@ -124,3 +124,13 @@ VALUES
     NOW() - INTERVAL '2 days',
     NOW() - INTERVAL '1 day 22 hours'
 );
+
+INSERT INTO ambulances (ambulance_number, driver_name, status, latitude, longitude)
+VALUES
+    ('AMB-001', 'Rahul Sharma',   'available', 18.5204, 73.8567),
+    ('AMB-002', 'Priya Mehta',    'available', 18.5310, 73.8710),
+    ('AMB-003', 'Ankit Joshi',    'available', 18.5089, 73.8421),
+    ('AMB-004', 'Sunita Rao',     'busy',      18.5450, 73.8850),
+    ('AMB-005', 'Vikram Patil',   'available', 18.4950, 73.8300),
+    ('AMB-006', 'Deepa Kulkarni', 'offline',   18.5600, 73.9000)
+ON CONFLICT (ambulance_number) DO NOTHING;

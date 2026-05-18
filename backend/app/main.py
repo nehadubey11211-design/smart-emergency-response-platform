@@ -39,6 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.database.db import engine, Base, check_database_connection, is_neon
 from app.routes import auth, accidents, traffic, analytics
+from app.routes.ambulance_routes import router as ambulance_router   
 
 from app.routes import password_reset
 
@@ -147,6 +148,12 @@ app.include_router(
     analytics.router,
     prefix="/api/analytics",
     tags=["📊 Analytics"],
+)
+
+app.include_router(
+    ambulance_router, 
+    prefix="/api",
+    tags=["🚑 Ambulances"],
 )
 
 app.include_router(

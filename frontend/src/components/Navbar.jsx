@@ -39,8 +39,9 @@ import {LayoutDashboard,BarChart2,History,LogOut,Siren,n} from "lucidn-react";
 
 const NAV_ITEMS = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/analytics", icon: BarChart2, label: "Analytics" },
-  { to: "/history", icon: History, label: "History" },
+  { to: "/analytics", icon: BarChart2,       label: "Analytics" },
+  { to: "/history",   icon: History,         label: "History"   },
+  { to: "/ambulance/1", icon: Siren,         label: "Ambulance" },
 ];
 
 export default function Navbar() {

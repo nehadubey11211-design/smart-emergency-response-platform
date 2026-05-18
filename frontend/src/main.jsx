@@ -37,7 +37,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";  // Global CSS: variables, base reset, utility classes
-
+//import "leaflet/dist/leaflet.css";
 // Find the HTML element with id="root" (defined in public/index.html)
 // and create a React root attached to it.
 const root = ReactDOM.createRoot(document.getElementById("root"));
