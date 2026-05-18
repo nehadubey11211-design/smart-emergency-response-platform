@@ -155,6 +155,8 @@ app.include_router(
     prefix="/api",
     tags=["🚑 Ambulances"],
 )
+
+app.include_router(
     password_reset.router,
     prefix="/api/password",
     tags=["🔐 Password Reset"],
