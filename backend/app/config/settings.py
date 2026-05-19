@@ -106,7 +106,8 @@ class Settings(BaseSettings):
     # SECRET_KEY is used to sign JWT tokens. Anyone with this key can forge
     # valid tokens, so use a long random string in production.
     # Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
-    SECRET_KEY: str = "dev-secret-key-change-this-in-production-please"
+    SECRET_KEY: str = "postgresql://user:password@ep-xxx.neon.tech/dbname?sslmode=require"
+
 
     # Algorithm used to sign JWTs. HS256 is HMAC + SHA-256 (symmetric).
     ALGORITHM: str = "HS256"
