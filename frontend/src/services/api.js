@@ -38,7 +38,7 @@ import axios from "axios";
 // import.meta.env reads Vite environment variables defined in frontend/.env
 // VITE_API_URL=http://localhost:8000/api  (dev)
 // In production: VITE_API_URL=https://api.yourdomain.com/api
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // ─── Axios Instance ───────────────────────────────────────────────────────────
 // Creating a custom instance lets us set defaults without affecting the

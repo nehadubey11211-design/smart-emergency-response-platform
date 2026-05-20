@@ -33,6 +33,7 @@ fastapi==0.111.0           # Async web framework — routes, middleware, DI
 uvicorn[standard]==0.30.1  # ASGI server that runs FastAPI
                            # [standard] includes uvloop + websockets
 python-multipart==0.0.9    # Required for file upload support in FastAPI
+slowapi==0.1.9            # Rate limiting for FastAPI (optional, but good for security)
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.30         # ORM — maps Python classes to DB tables
@@ -61,11 +62,9 @@ bcrypt==4.1.3              # Password hashing
 
 # ─── AI / Computer Vision ─────────────────────────────────────────────────────
 tensorflow==2.16.1         # Deep learning framework — MobileNetV2 model
-scipy==1.11.4              # Required for model training (used by TensorFlow/Keras backend)
-numpy==1.26.4              # Numerical computing — array operations for preprocessing
-opencv-python-headless==4.9.0.80  # Computer vision — video capture + frame processing
-                           # headless = no GUI dependencies (works on servers)
-Pillow==10.3.0             # Image processing — used by TensorFlow's ImageDataGenerator
+numpy==1.26.4              # Numerical computing
+opencv-python-headless==4.9.0.80  # Computer vision — headless for servers
+Pillow==10.3.0             # Image processing
 
 # ─── HTTP Client ──────────────────────────────────────────────────────────────
 httpx==0.27.0              # Async HTTP client

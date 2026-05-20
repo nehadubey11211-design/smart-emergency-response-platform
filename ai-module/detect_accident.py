@@ -58,7 +58,7 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000/api/accidents")
 MODEL_PATH  = os.path.join(os.path.dirname(__file__), "model", "accident_model.h5")
 
 # Confidence threshold: 0.75 = only alert if model is ≥75% confident
-CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.75"))
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.85"))
 
 # Analyze every Nth frame (1 per second at 30fps → N=30)
 FRAME_INTERVAL = 10
@@ -70,7 +70,7 @@ ALERT_COOLDOWN_SECONDS = 60
 CAMERA_ID = os.getenv("CAMERA_ID", "CAM-001")
 
 # Video source: 0 = default webcam, or a path/URL
-VIDEO_SOURCE =   int(os.getenv("VIDEO_SOURCE", "0")) \
+VIDEO_SOURCE = int(os.getenv("VIDEO_SOURCE", "0")) \
     if os.getenv("VIDEO_SOURCE", "0").isdigit() \
     else os.getenv("VIDEO_SOURCE", "0")
 
@@ -78,7 +78,9 @@ VIDEO_SOURCE =   int(os.getenv("VIDEO_SOURCE", "0")) \
 #(Keras sorts class names alphabetically by default)
 CLASS_LABELS = ["accident", "normal", "traffic_jam"]
 
-
+# Default coordinates (example: Pune)
+DEFAULT_LAT = 18.483243
+DEFAULT_LON = 73.809709
 # ─── Model Loading ────────────────────────────────────────────────────────────
 
 def load_model():
@@ -154,7 +156,13 @@ def confidence_to_severity(confidence: float) -> str:
 
 # ─── Backend API Communication ────────────────────────────────────────────────
 
-def send_alert_to_backend(location: str, confidence: float, severity: str) -> bool:
+def send_alert_to_backend(
+    location: str,
+    confidence: float,
+    severity: str ,
+    lat: float,
+    lon: float
+) -> bool:
     """
     POST a new accident record to the FastAPI backend.
 
@@ -170,6 +178,8 @@ def send_alert_to_backend(location: str, confidence: float, severity: str) -> bo
         "severity":    severity,
         "confidence":  round(confidence, 4),
         "camera_id":   CAMERA_ID,
+        "latitude": lat,
+        "longitude": lon,
         "description": (
             f"Auto-detected by AI module at "
             f"{datetime.now().strftime('%H:%M:%S')} "
@@ -288,6 +298,9 @@ def run_detection():
                         location   = f"{CAMERA_ID} Zone",
                         confidence = confidence,
                         severity   = severity,
+                         # Coordinates
+                        lat = DEFAULT_LAT,
+                        lon = DEFAULT_LON,
                     )
                     if success:
                         last_alert_time = current_time

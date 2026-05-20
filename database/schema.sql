@@ -150,3 +150,50 @@ CREATE OR REPLACE VIEW todays_summary AS
         )::NUMERIC, 1)                                     AS avg_response_minutes
     FROM accidents
     WHERE DATE(detected_at) = CURRENT_DATE;
+
+-- ENUM type for ambulance operational status.
+-- Stored in the DB so even raw SQL inserts are validated.
+DO $$ BEGIN
+    CREATE TYPE ambulance_status AS ENUM ('available', 'busy', 'offline');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;  -- safe to re-run
+END $$;
+ 
+-- Main ambulances table
+CREATE TABLE IF NOT EXISTS ambulances (
+    id               SERIAL          PRIMARY KEY,
+    ambulance_number VARCHAR(20)     NOT NULL UNIQUE,
+    driver_name      VARCHAR(100)    NOT NULL,
+    status           ambulance_status NOT NULL DEFAULT 'available',
+    latitude         DOUBLE PRECISION,
+    longitude        DOUBLE PRECISION,
+    last_updated     TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+ 
+-- Index on status: dispatch queries always filter WHERE status = 'available'
+CREATE INDEX IF NOT EXISTS idx_ambulances_status
+    ON ambulances (status);
+ 
+-- Partial index on coordinates for available units only.
+-- The dispatch service only queries available units with valid GPS.
+-- Partial index is smaller and faster than a full index.
+CREATE INDEX IF NOT EXISTS idx_ambulances_gps_available
+    ON ambulances (latitude, longitude)
+    WHERE status = 'available'
+      AND latitude  IS NOT NULL
+      AND longitude IS NOT NULL;
+ 
+-- Trigger: keep last_updated current on every row change
+CREATE OR REPLACE FUNCTION update_ambulance_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.last_updated = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+ 
+DROP TRIGGER IF EXISTS trg_ambulance_updated ON ambulances;
+CREATE TRIGGER trg_ambulance_updated
+    BEFORE UPDATE ON ambulances
+    FOR EACH ROW EXECUTE FUNCTION update_ambulance_timestamp();
+ 
