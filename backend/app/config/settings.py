@@ -100,13 +100,13 @@ class Settings(BaseSettings):
     # For local development fallback (if Neon is not configured),
     # we default to SQLite so the app still starts without crashing.
     # REMOVE this default in production and make DATABASE_URL required.
-    DATABASE_URL: str = "postgresql://user:password@ep-xxx.neon.tech/dbname?sslmode=require"
+    DATABASE_URL: str = "sqlite:///./dev.db"
 
     # ── JWT (JSON Web Token) Authentication ──────────────────────────────────
     # SECRET_KEY is used to sign JWT tokens. Anyone with this key can forge
     # valid tokens, so use a long random string in production.
     # Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
-    SECRET_KEY: str = "postgresql://user:password@ep-xxx.neon.tech/dbname?sslmode=require"
+    SECRET_KEY: str = "change-me-in-production"
 
 
     # Algorithm used to sign JWTs. HS256 is HMAC + SHA-256 (symmetric).

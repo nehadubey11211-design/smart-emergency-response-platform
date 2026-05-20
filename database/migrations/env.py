@@ -85,7 +85,17 @@ target_metadata = Base.metadata
 # ── Override DATABASE_URL from settings ───────────────────────────────────────
 # This ensures Alembic uses the same DATABASE_URL as the FastAPI app.
 # For Neon, this will include the ?sslmode=require parameter.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# If the environment contains an async URL, convert it back to sync for Alembic.
+
+def make_sync_url(url: str) -> str:
+    """
+    Convert async SQLAlchemy URLs into a sync-only URL for Alembic.
+    """
+    if url.startswith("postgresql+asyncpg://"):
+        return url.replace("postgresql+asyncpg://", "postgresql://", 1)
+    return url
+
+config.set_main_option("sqlalchemy.url", make_sync_url(settings.DATABASE_URL))
 
 
 # ── Neon Detection ────────────────────────────────────────────────────────────
@@ -157,7 +167,7 @@ def run_migrations_online() -> None:
     # For local PG/SQLite: connect_args={} (empty — no SSL needed).
 
     connectable = create_engine(
-        settings.DATABASE_URL,
+        make_sync_url(settings.DATABASE_URL),
 
         # NEON: pass SSL connect_args
         connect_args=get_connect_args(),

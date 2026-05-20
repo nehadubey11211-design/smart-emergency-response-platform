@@ -37,6 +37,7 @@ slowapi==0.1.9            # Rate limiting for FastAPI (optional, but good for se
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.30         # ORM — maps Python classes to DB tables
+asyncpg==0.27.0             # Async PostgreSQL driver used by SQLAlchemy async engine
 
 # NEON NOTE:
 #   psycopg2-binary is the PostgreSQL driver that handles the TCP+SSL

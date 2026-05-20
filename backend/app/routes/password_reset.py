@@ -58,7 +58,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
 from app.schemas.password_reset_schema import (
@@ -101,7 +101,7 @@ router = APIRouter()
 async def forgot_password(
     request: Request,                       # required by slowapi to read client IP
     body: ForgotPasswordRequest,            # Pydantic schema — moved to `body`
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     POST /api/password/forgot
@@ -183,7 +183,7 @@ async def forgot_password(
 async def verify_otp_and_reset(
     request: Request,                       # required by slowapi to read client IP
     body: VerifyOTPRequest,                 # Pydantic schema — moved to `body`
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     POST /api/password/verify-otp

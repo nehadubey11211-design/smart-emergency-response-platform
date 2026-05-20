@@ -1,4 +1,4 @@
-"""
+﻿"""
 FILE: backend/app/routes/auth.py
 ======================================
 Authentication Endpoints
@@ -38,8 +38,10 @@ from typing import Optional
 
 import bcrypt
 import jwt
+
 from fastapi import APIRouter, Depends, HTTPException, Header, status
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
 from app.database.db import get_db
@@ -59,27 +61,13 @@ router = APIRouter()
 def hash_password(plain_password: str) -> str:
     """
     Hash a plaintext password using bcrypt.
-
-    bcrypt automatically generates and embeds a salt — no need to manage
-    salts separately.  The resulting hash looks like:
-      $2b$12$<22-char-salt><31-char-hash>
-
-    The '12' is the cost factor (2^12 = 4096 iterations).
-    Higher cost = slower hashing = harder to brute-force.
     """
-    salt   = bcrypt.gensalt(rounds=12)
+    salt = bcrypt.gensalt(rounds=12)
     hashed = bcrypt.hashpw(plain_password.encode("utf-8"), salt)
     return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Safely compare a plaintext password against a stored bcrypt hash.
-
-    bcrypt.checkpw re-extracts the salt from the hash and re-hashes
-    the candidate password, then compares in constant time.
-    The constant-time comparison prevents timing attacks.
-    """
     return bcrypt.checkpw(
         plain_password.encode("utf-8"),
         hashed_password.encode("utf-8"),
@@ -89,18 +77,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # ─── JWT Helpers ──────────────────────────────────────────────────────────────
 
 def create_access_token(user_id: int) -> str:
-    """
-    Create a signed JWT containing the user's ID and an expiry timestamp.
-
-    JWT structure:  header.payload.signature
-    Payload (claims):
-      sub  — Subject: the user's ID (standard JWT claim)
-      exp  — Expiry: Unix timestamp when this token becomes invalid
-      iat  — Issued At: when the token was created
-
-    The token is signed with HMAC-SHA256 using SECRET_KEY, so any
-    modification to the payload will invalidate the signature.
-    """
     now = datetime.now(tz=timezone.utc)
     payload = {
         "sub": str(user_id),
@@ -111,14 +87,6 @@ def create_access_token(user_id: int) -> str:
 
 
 def decode_token(token: str) -> Optional[int]:
-    """
-    Decode and verify a JWT, returning the user_id (sub claim).
-    Returns None if the token is invalid or expired.
-
-    jwt.decode() verifies:
-      1. The signature (token hasn't been tampered with)
-      2. The expiry (token hasn't expired)
-    """
     try:
         payload = jwt.decode(
             token,
@@ -127,23 +95,15 @@ def decode_token(token: str) -> Optional[int]:
         )
         return int(payload["sub"])
     except jwt.ExpiredSignatureError:
-        return None   # Token is valid but expired
+        return None
     except jwt.InvalidTokenError:
-        return None   # Token is malformed or signature mismatch
+        return None
 
 
-def get_current_user(
+async def get_current_user(
     token: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
-    """
-    FastAPI dependency that extracts + verifies the JWT and returns the User.
-
-    Usage in a protected route:
-      @router.get("/protected")
-      def protected(user: User = Depends(get_current_user)):
-          return {"hello": user.name}
-    """
     user_id = decode_token(token)
     if user_id is None:
         raise HTTPException(
@@ -152,7 +112,8 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -166,44 +127,31 @@ def get_current_user(
     return user
 
 
-# ─── Route Handlers ───────────────────────────────────────────────────────────
-
 @router.post(
     "/register",
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
 )
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """
-    Create a new user account and return an access token.
-
-    Steps:
-      1. Check the email isn't already registered (unique constraint)
-      2. Hash the password with bcrypt
-      3. Insert the user row
-      4. Create and return a JWT
-    """
-    # Step 1: duplicate email check
-    existing = db.query(User).filter(User.email == user_data.email).first()
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == user_data.email))
+    existing = result.scalar_one_or_none()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="An account with this email already exists",
         )
 
-    # Step 2 + 3: create user with hashed password
     user = User(
         name=user_data.name,
         email=user_data.email,
-        password=hash_password(user_data.password),  # NEVER store plaintext
+        password=hash_password(user_data.password),
         role=user_data.role,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)  # Populates auto-generated fields (id, created_at)
+    await db.commit()
+    await db.refresh(user)
 
-    # Step 4: issue a JWT
     token = create_access_token(user.id)
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
@@ -213,19 +161,11 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     response_model=TokenResponse,
     summary="Login and receive an access token",
 )
-def login(credentials: UserLogin, db: Session = Depends(get_db)):
-    """
-    Authenticate with email + password.
-    Returns a JWT token on success.
 
-    SECURITY NOTE:
-      We return the same generic error for both "user not found" and
-      "wrong password" to prevent user enumeration attacks (an attacker
-      discovering which emails are registered by testing error messages).
-    """
-    user = db.query(User).filter(User.email == credentials.email).first()
+async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == credentials.email))
+    user = result.scalar_one_or_none()
 
-    # Use a constant-time check even if user is None to prevent timing attacks
     if user is None or not verify_password(credentials.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -247,23 +187,18 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
     response_model=UserResponse,
     summary="Get the currently authenticated user",
 )
-def get_me(authorization: str = Header(None), db: Session = Depends(get_db)):
-    """
-    Returns the profile of the user identified by the JWT.
-    Used by the frontend after page reload to restore session state.
-    """
+async def get_me(authorization: str = Header(None), db: AsyncSession = Depends(get_db)):
     if authorization is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization header required",
         )
-    
-    # Extract token from "Bearer <token>"
+
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization header format",
         )
-    
+
     token = authorization.split(" ")[1]
-    return get_current_user(token, db)
+    return await get_current_user(token, db)

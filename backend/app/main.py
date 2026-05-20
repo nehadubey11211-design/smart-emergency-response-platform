@@ -30,11 +30,15 @@ INTERVIEW TALKING POINT:
   check. This warms up Neon's serverless compute so the first user
   request isn't slow after a period of inactivity."
 """
+import uuid
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from contextlib import asynccontextmanager
 
+from fastapi import Response, Request
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config.settings import settings
 from app.database.db import engine, Base, check_database_connection, is_neon
@@ -74,13 +78,14 @@ async def lifespan(app: FastAPI):
     # Create all SQLAlchemy-defined tables if they don't exist.
     # This works identically with Neon and local PostgreSQL.
     # In production, use Alembic migrations instead.
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     print("✅ Database tables verified / created")
 
     # NEON ADDITION: Verify connection and warm up Neon compute.
     # For Neon free tier, this prevents the first API call from being slow
     # due to compute cold start after inactivity.
-    db_ok = check_database_connection()
+    db_ok = await check_database_connection()
     if not db_ok and is_neon:
         print("⚠️  Warning: Neon database connection failed at startup.")
         print("   Check your DATABASE_URL in .env — ensure it contains ?sslmode=require")
@@ -93,7 +98,13 @@ async def lifespan(app: FastAPI):
     # ── Shutdown ───────────────────────────────────────────────────────────────
     print("🛑 Shutting down server — cleanup complete")
 
-
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
 # ─── FastAPI Instance ─────────────────────────────────────────────────────────
 
 app = FastAPI(
@@ -165,6 +176,11 @@ app.include_router(
 
 # ─── Root Endpoints ───────────────────────────────────────────────────────────
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception: %s", exc)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
 @app.get("/", tags=["🏠 Root"])
 async def root():
     """Landing endpoint — confirms the server is running."""
@@ -178,7 +194,7 @@ async def root():
 
 
 @app.get("/health", tags=["🏠 Root"])
-async def health_check():
+async def health_check(response: Response):
     """
     Health check endpoint used by Docker, load balancers, and monitoring tools.
 
@@ -189,9 +205,13 @@ async def health_check():
 
       Returns:
         200 OK with status "ok"     → app and DB are healthy
-        200 OK with status "degraded" → app running but DB unreachable
+        503 Service Unavailable      → app running but DB unreachable
     """
-    db_healthy = check_database_connection()
+    db_healthy = await check_database_connection()
+    if not db_healthy:
+        response.status_code = 503
+        return {"status": "ok" if db_healthy else "degraded"}
+
 
     return {
         "status":   "ok" if db_healthy else "degraded",
