@@ -8,6 +8,7 @@ Accident CRUD Endpoints + WebSocket Live Feed
 import json
 from datetime import datetime, timezone
 from typing import List, Optional
+from app.integrations.accident_dispatch import trigger_ambulance_dispatch
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
@@ -117,15 +118,16 @@ async def create_accident(
     await AlertService.send_alert(accident)
     await NotificationService.notify_all(accident)
 
+    # ── Ambulance dispatch ─────────────────────────────────────
     if accident.latitude and accident.longitude:
         await trigger_ambulance_dispatch(
-            db=db,
-            accident_id=accident.id,
-            accident_lat=accident.latitude,
-            accident_lon=accident.longitude,
-            severity=accident.severity,
-            confidence=accident.confidence or 0.0,
-            location_desc=accident.location or "",
+            db            = db,
+            accident_id   = accident.id,
+            accident_lat  = accident.latitude,
+            accident_lon  = accident.longitude,
+            severity      = accident.severity,
+            confidence    = accident.confidence or 0.0,
+            location_desc = accident.location or "",
         )
 
     return accident

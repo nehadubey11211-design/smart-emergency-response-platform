@@ -1,4 +1,4 @@
-﻿"""
+"""
 FILE : backend/app/integrations/accident_dispatch.py
 -----------------------------------
 The single integration point between your existing accident detection
@@ -56,16 +56,28 @@ async def trigger_ambulance_dispatch(
     accident_lat:  float,
     accident_lon:  float,
     severity:      str,
-    confidence:    float,
+    confidence:    float,   # 0.0 – 1.0 from MobileNetV2 softmax
     location_desc: str = "",
 ) -> None:
+    """
+    Orchestrates the full dispatch sequence after an accident is confirmed:
+
+      Step 1 — Auto-dispatch the nearest available unit (marks it busy)
+      Step 2 — Push DISPATCH_ALERT over WebSocket to that specific unit
+      Step 3 — Push NEARBY_ACCIDENT_ALERT to all other units in the radius
+                so drivers are aware even if not dispatched
+
+    This function is fire-and-forget from the accident route's perspective:
+    it never raises — all exceptions are caught and logged so that a dispatch
+    failure never causes the accident record creation to fail.
+    """
     time_detected = datetime.now(timezone.utc).isoformat()
 
     logger.info(
         "[Dispatch] Accident #%d at (%.4f, %.4f) — severity=%s confidence=%.0f%%",
         accident_id, accident_lat, accident_lon, severity, confidence * 100,
     )
-
+ # ── Step 1: auto-dispatch nearest unit ───────────────────────────────
     try:
         result = await dispatch_nearest_ambulance(db, accident_lat, accident_lon)
     except Exception as exc:
@@ -74,6 +86,7 @@ async def trigger_ambulance_dispatch(
 
     dispatched_id: int | None = None
 
+    # ── Step 2: push urgent DISPATCH_ALERT to the assigned unit ──────────
     if result:
         dispatched_id = result.ambulance.id
         dispatch_payload = {
@@ -89,7 +102,7 @@ async def trigger_ambulance_dispatch(
             "location":      location_desc,
             "time_detected": time_detected,
             "message":       result.message,
-            "sound":         True,
+            "sound":         True,   # frontend plays alert beep
         }
         try:
             delivered = await ambulance_ws_manager.send_to_ambulance(
@@ -97,7 +110,8 @@ async def trigger_ambulance_dispatch(
             )
             if not delivered:
                 logger.warning(
-                    "[Dispatch] Ambulance %d is not connected to WebSocket — dispatch saved in DB but realtime alert not delivered.",
+                    "[Dispatch] Ambulance %d is not connected to WebSocket — "
+                    "dispatch saved in DB but realtime alert not delivered.",
                     dispatched_id,
                 )
         except Exception as exc:
@@ -106,12 +120,14 @@ async def trigger_ambulance_dispatch(
         logger.warning(
             "[Dispatch] No available ambulances near accident #%d.", accident_id
         )
-
+        
+ # ── Step 3: awareness alert to ALL other nearby units ────────────────
     try:
         nearby = await get_nearby_ambulances(
             db, accident_lat, accident_lon, radius_km=_AWARENESS_RADIUS_KM
         )
         awareness_ids = [u.id for u in nearby if u.id != dispatched_id]
+   # Exclude the unit that was just dispatched (it already received a fuller alert)
 
         if awareness_ids:
             awareness_payload = {
@@ -131,7 +147,7 @@ async def trigger_ambulance_dispatch(
                     if result else
                     "Accident nearby — no unit available yet."
                 ),
-                "sound": False,
+                "sound": False,   # awareness only, no alarm sound
             }
             await ambulance_ws_manager.broadcast_to_nearby(awareness_ids, awareness_payload)
             logger.info("[Dispatch] Awareness alert sent to %d nearby units.", len(awareness_ids))
