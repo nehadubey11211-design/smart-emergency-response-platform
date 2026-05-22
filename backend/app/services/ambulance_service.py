@@ -1,6 +1,5 @@
 """
 FILE : backend/app/services/ambulance_service.py
-==========================================
 All business logic for ambulance dispatch lifecycle.
 
 Complete flow implemented here:
@@ -20,7 +19,8 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.ambulance import Ambulance, AmbulanceStatus
@@ -70,12 +70,11 @@ def estimate_eta(distance_km: float, speed_kmh: float = _AVG_SPEED_KMH) -> float
         return 0.0
     return round((distance_km / speed_kmh) * 60, 1)
 
-
 # ═══════════════════════════════════════
 #  CRUD
 # ═══════════════════════════════════════
 
-def create_ambulance(db: Session, payload: AmbulanceCreate) -> Ambulance:
+async def create_ambulance(db: AsyncSession, payload: AmbulanceCreate) -> Ambulance:
     try:
         unit = Ambulance(
             ambulance_number=payload.ambulance_number,
@@ -85,68 +84,65 @@ def create_ambulance(db: Session, payload: AmbulanceCreate) -> Ambulance:
             status=AmbulanceStatus.available,
         )
         db.add(unit)
-        db.commit()
-        db.refresh(unit)
+        await db.commit()
+        await db.refresh(unit)
         return unit
     except SQLAlchemyError as exc:
-        db.rollback()
+        await db.rollback()
         logger.error("create_ambulance failed: %s", exc)
         raise
 
 
-def get_all_ambulances(db: Session) -> List[Ambulance]:
-    return db.query(Ambulance).order_by(Ambulance.id).all()
+async def get_all_ambulances(db: AsyncSession) -> List[Ambulance]:
+    result = await db.execute(select(Ambulance).order_by(Ambulance.id))
+    return result.scalars().all()
 
 
-def get_ambulance_by_id(db: Session, ambulance_id: int) -> Optional[Ambulance]:
-    return db.query(Ambulance).filter(Ambulance.id == ambulance_id).first()
+async def get_ambulance_by_id(db: AsyncSession, ambulance_id: int) -> Optional[Ambulance]:
+    result = await db.execute(select(Ambulance).where(Ambulance.id == ambulance_id))
+    return result.scalar_one_or_none()
 
 
-def update_location(
-    db: Session,
+async def update_location(
+    db: AsyncSession,
     ambulance_id: int,
     payload: AmbulanceLocationUpdate,
 ) -> Optional[Ambulance]:
-    """
-    Update GPS coords in DB.
-    Root cause fix for GPS tracking:
-      - Always commits immediately so next query sees fresh coords
-      - Returns updated unit so caller can broadcast WS event
-    """
-    unit = get_ambulance_by_id(db, ambulance_id)
+    unit = await get_ambulance_by_id(db, ambulance_id)
     if not unit:
         return None
-    unit.latitude  = payload.latitude
+    unit.latitude = payload.latitude
     unit.longitude = payload.longitude
     try:
-        db.commit()
-        db.refresh(unit)
+        await db.commit()
+        await db.refresh(unit)
     except SQLAlchemyError as exc:
-        db.rollback()
+        await db.rollback()
         logger.error("update_location failed for ambulance %d: %s", ambulance_id, exc)
         raise
     return unit
 
 
-def update_status(
-    db: Session, ambulance_id: int, new_status: AmbulanceStatus
+async def update_status(
+    db: AsyncSession,
+    ambulance_id: int,
+    new_status: AmbulanceStatus,
 ) -> Optional[Ambulance]:
-    unit = get_ambulance_by_id(db, ambulance_id)
+    unit = await get_ambulance_by_id(db, ambulance_id)
     if not unit:
         return None
     unit.status = new_status
-    db.commit()
-    db.refresh(unit)
+    await db.commit()
+    await db.refresh(unit)
     logger.info("Ambulance %s → %s", unit.ambulance_number, new_status)
     return unit
-
 
 # ═══════════════════════════════════════
 #  Dispatch logic
 # ═══════════════════════════════════════
 
-def get_nearby_ambulances(
-    db: Session,
+async def get_nearby_ambulances(
+    db: AsyncSession,
     lat: float,
     lon: float,
     radius_km: float = _DEFAULT_RADIUS,
@@ -160,8 +156,8 @@ def get_nearby_ambulances(
     min_lat, max_lat = lat - lat_delta, lat + lat_delta
     min_lon, max_lon = lon - lon_delta, lon + lon_delta
 
-    available = (
-        db.query(Ambulance)
+    result = await db.execute(
+        select(Ambulance)
         .filter(
             Ambulance.status == AmbulanceStatus.available,
             Ambulance.latitude.isnot(None),
@@ -169,8 +165,8 @@ def get_nearby_ambulances(
             Ambulance.latitude.between(min_lat, max_lat),
             Ambulance.longitude.between(min_lon, max_lon),
         )
-        .all()
     )
+    available = result.scalars().all()
 
     candidates = []
     for unit in available:
@@ -178,15 +174,15 @@ def get_nearby_ambulances(
         if dist <= radius_km:
             candidates.append(
                 NearbyAmbulanceResponse(
-                    id               = unit.id,
-                    ambulance_number = unit.ambulance_number,
-                    driver_name      = unit.driver_name,
-                    status           = unit.status,
-                    latitude         = unit.latitude,
-                    longitude        = unit.longitude,
-                    last_updated     = unit.last_updated,
-                    distance_km      = round(dist, 2),
-                    eta_minutes      = estimate_eta(dist),
+                    id=unit.id,
+                    ambulance_number=unit.ambulance_number,
+                    driver_name=unit.driver_name,
+                    status=unit.status,
+                    latitude=unit.latitude,
+                    longitude=unit.longitude,
+                    last_updated=unit.last_updated,
+                    distance_km=round(dist, 2),
+                    eta_minutes=estimate_eta(dist),
                 )
             )
 
@@ -194,17 +190,19 @@ def get_nearby_ambulances(
     return candidates[:limit]
 
 
-def dispatch_nearest_ambulance(
-    db: Session, accident_lat: float, accident_lon: float
+async def dispatch_nearest_ambulance(
+    db: AsyncSession,
+    accident_lat: float,
+    accident_lon: float,
 ) -> Optional[DispatchResult]:
     """Auto-dispatch closest available unit and mark it busy."""
-    nearby = get_nearby_ambulances(db, accident_lat, accident_lon, limit=1)
+    nearby = await get_nearby_ambulances(db, accident_lat, accident_lon, limit=1)
     if not nearby:
         logger.warning("dispatch_nearest_ambulance: no available units.")
         return None
 
     best     = nearby[0]
-    assigned = update_status(db, best.id, AmbulanceStatus.busy)
+    assigned = await update_status(db, best.id, AmbulanceStatus.busy)
     if not assigned:
         return None
 
@@ -212,7 +210,7 @@ def dispatch_nearest_ambulance(
         ambulance   = assigned,
         distance_km = best.distance_km,
         eta_minutes = best.eta_minutes,
-        message     = (
+        message=(
             f"Ambulance {assigned.ambulance_number} dispatched. "
             f"ETA {best.eta_minutes} min."
         ),
@@ -248,17 +246,15 @@ def get_nearby_hospitals(
     results.sort(key=lambda x: x["distance_km"])
     return results[:limit]
 
-
 # ═══════════════════════════════════════
 #  Dispatch lifecycle completion
 # ═══════════════════════════════════════
-
-def complete_dispatch(
-    db: Session,
+async def complete_dispatch(
+    db: AsyncSession,
     ambulance_id: int,
     accident_id: Optional[int] = None,
 ) -> Tuple[Optional[Ambulance], Optional[Accident]]:
-    """
+  """
     Mark job complete:
       1. Set ambulance status → available
       2. If accident_id provided: set accident status → resolved + resolved_at
@@ -267,27 +263,28 @@ def complete_dispatch(
       Previously only ambulance status was updated.
       Now accident is also resolved atomically in the same transaction.
     """
-    unit     = get_ambulance_by_id(db, ambulance_id)
+    unit = await get_ambulance_by_id(db, ambulance_id)
     accident = None
 
     if unit:
         unit.status = AmbulanceStatus.available
 
     if accident_id:
-        accident = db.query(Accident).filter(Accident.id == accident_id).first()
+        result = await db.execute(select(Accident).where(Accident.id == accident_id))
+        accident = result.scalar_one_or_none()
         if accident:
-            accident.status      = AccidentStatus.resolved
+            accident.status = AccidentStatus.resolved
             accident.resolved_at = datetime.now(tz=timezone.utc)
             logger.info("Accident #%d marked resolved.", accident_id)
 
     try:
-        db.commit()
+        await db.commit()
         if unit:
-            db.refresh(unit)
+            await db.refresh(unit)
         if accident:
-            db.refresh(accident)
+            await db.refresh(accident)
     except SQLAlchemyError as exc:
-        db.rollback()
+        await db.rollback()
         logger.error("complete_dispatch failed: %s", exc)
         raise
 

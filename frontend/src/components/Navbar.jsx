@@ -33,7 +33,7 @@
 import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
 
-import {LayoutDashboard,BarChart2,History,LogOut,Siren,n} from "lucidn-react";
+import {LayoutDashboard,BarChart2,History,LogOut,Siren} from "lucide-react";
 
 // ─── Navigation Configuration ─────────────────────────────────────────────────
 

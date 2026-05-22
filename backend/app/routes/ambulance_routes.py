@@ -1,6 +1,5 @@
 """
-FIEL : backend/app/routes/ambulance_routes.py
-=======================================
+FILE : backend/app/routes/ambulance_routes.py
 REST + WebSocket endpoints for the ambulance dispatch lifecycle.
 
 New endpoints added (root cause fixes):
@@ -19,7 +18,7 @@ from fastapi import (
     APIRouter, Depends, HTTPException, Query,
     WebSocket, WebSocketDisconnect, status,
 )
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
 from app.models.ambulance import AmbulanceStatus
@@ -34,47 +33,45 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ambulances", tags=["Ambulance Dispatch"])
 
-
 # ═══════════════════════════════════════
 #  Registration & listing
 # ═══════════════════════════════════════
 
 @router.post("/register", response_model=AmbulanceResponse, status_code=201)
-async def register_ambulance(payload: AmbulanceCreate, db: Session = Depends(get_db)):
+async def register_ambulance(payload: AmbulanceCreate, db: AsyncSession = Depends(get_db)):
     try:
-        return svc.create_ambulance(db, payload)
+        return await svc.create_ambulance(db, payload)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/", response_model=list[AmbulanceResponse])
-async def list_ambulances(db: Session = Depends(get_db)):
-    return svc.get_all_ambulances(db)
+async def list_ambulances(db: AsyncSession = Depends(get_db)):
+    return await svc.get_all_ambulances(db)
 
 
 @router.get("/nearby", response_model=list[NearbyAmbulanceResponse])
 async def get_nearby(
-    lat:       float = Query(...),
-    lon:       float = Query(...),
+    lat: float       = Query(...),
+    lon: float       = Query(...),
     radius_km: float = Query(20.0),
-    limit:     int   = Query(5),
-    db:        Session = Depends(get_db),
+    limit: int       = Query(5),
+    db: AsyncSession = Depends(get_db),
 ):
-    return svc.get_nearby_ambulances(db, lat, lon, radius_km, limit)
-
-
+    return await svc.get_nearby_ambulances(db, lat, lon, radius_km, limit)
+  
 # ═══════════════════════════════════════
 #  Hospital routing
 # ═══════════════════════════════════════
 
 @router.get("/hospitals/nearby")
 async def get_nearby_hospitals(
-    lat:       float = Query(..., description="Pickup/accident latitude"),
-    lon:       float = Query(..., description="Pickup/accident longitude"),
+    lat: float       = Query(..., description="Pickup/accident latitude"),
+    lon: float       = Query(..., description="Pickup/accident longitude"),
     radius_km: float = Query(30.0),
-    limit:     int   = Query(3),
+    limit: int       = Query(3),
 ):
-    """
+     """
     Find nearest hospitals to a given location.
     Called by frontend after patient pickup to render Route 2.
     """
@@ -83,14 +80,13 @@ async def get_nearby_hospitals(
         raise HTTPException(status_code=404, detail="No hospitals found within radius.")
     return hospitals
 
-
 # ═══════════════════════════════════════
 #  Single-unit operations
 # ═══════════════════════════════════════
 
 @router.get("/{ambulance_id}", response_model=AmbulanceResponse)
-async def get_ambulance(ambulance_id: int, db: Session = Depends(get_db)):
-    unit = svc.get_ambulance_by_id(db, ambulance_id)
+async def get_ambulance(ambulance_id: int, db: AsyncSession = Depends(get_db)):
+    unit = await svc.get_ambulance_by_id(db, ambulance_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Ambulance not found.")
     return unit
@@ -99,10 +95,10 @@ async def get_ambulance(ambulance_id: int, db: Session = Depends(get_db)):
 @router.put("/{ambulance_id}/location", response_model=AmbulanceResponse)
 async def update_location(
     ambulance_id: int,
-    payload:      AmbulanceLocationUpdate,
-    db:           Session = Depends(get_db),
+    payload: AmbulanceLocationUpdate,
+    db: AsyncSession = Depends(get_db),
 ):
-    """
+  """
     GPS ping from ambulance device (called every ~5 seconds).
 
     Root cause fix for GPS tracking not working:
@@ -110,17 +106,16 @@ async def update_location(
       - Broadcasts LOCATION_UPDATE via WebSocket so map marker moves in real time
       - Returns updated unit with fresh coords
     """
-    unit = svc.update_location(db, ambulance_id, payload)
+    unit = await svc.update_location(db, ambulance_id, payload)
     if not unit:
         raise HTTPException(status_code=404, detail="Ambulance not found.")
 
-    # Broadcast real-time location to operator dashboards
     await ambulance_ws_manager.broadcast_all({
-        "type":         "LOCATION_UPDATE",
+        "type": "LOCATION_UPDATE",
         "ambulance_id": ambulance_id,
-        "latitude":     payload.latitude,
-        "longitude":    payload.longitude,
-        "timestamp":    datetime.now(timezone.utc).isoformat(),
+        "latitude": payload.latitude,
+        "longitude": payload.longitude,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
     return unit
@@ -129,14 +124,13 @@ async def update_location(
 @router.put("/{ambulance_id}/status", response_model=AmbulanceResponse)
 async def update_status(
     ambulance_id: int,
-    payload:      AmbulanceStatusUpdate,
-    db:           Session = Depends(get_db),
+    payload: AmbulanceStatusUpdate,
+    db: AsyncSession = Depends(get_db),
 ):
-    unit = svc.update_status(db, ambulance_id, payload.status)
+    unit = await svc.update_status(db, ambulance_id, payload.status)
     if not unit:
         raise HTTPException(status_code=404, detail="Ambulance not found.")
     return unit
-
 
 # ═══════════════════════════════════════
 #  Missed-alert replay (fixes closed dashboard issue)
@@ -145,9 +139,9 @@ async def update_status(
 @router.get("/{ambulance_id}/missed-alerts")
 async def get_missed_alerts(
     ambulance_id: int,
-    since:        str = Query(None, description="ISO timestamp — return events after this"),
+    since: str = Query(None, description="ISO timestamp — return events after this"),
 ):
-    """
+   """
     Return stored alert events for an ambulance.
 
     Root cause fix for "alerts missed when dashboard was closed":
@@ -158,28 +152,26 @@ async def get_missed_alerts(
     events = ambulance_ws_manager.get_missed_alerts(ambulance_id, since_iso=since)
     return {"events": events, "count": len(events)}
 
-
 # ═══════════════════════════════════════
 #  Dispatch
 # ═══════════════════════════════════════
-
 @router.post("/dispatch", response_model=DispatchResult)
 async def dispatch(
-    lat:         float = Query(...),
-    lon:         float = Query(...),
-    accident_id: int   = Query(None, description="Link dispatch to an accident record"),
-    db:          Session = Depends(get_db),
+    lat: float       = Query(...),
+    lon: float       = Query(...),
+    accident_id: int = Query(None, description="Link dispatch to an accident record"),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
+   """
     Auto-dispatch nearest available ambulance.
     Pushes DISPATCH_ALERT to the assigned unit via WebSocket.
     Stores the event for offline replay.
     """
-    result = svc.dispatch_nearest_ambulance(db, lat, lon)
+    result = await svc.dispatch_nearest_ambulance(db, lat, lon)
     if not result:
         raise HTTPException(
-            status_code=503,
-            detail="No available ambulances within range.",
+            status_code = 503,
+            detail      = "No available ambulances within range.",
         )
 
     payload = {
@@ -207,9 +199,8 @@ async def dispatch(
 
 
 @router.post("/{ambulance_id}/accept")
-async def accept_dispatch(ambulance_id: int, db: Session = Depends(get_db)):
-    """Driver accepts dispatch. Broadcasts to operator dashboard."""
-    unit = svc.get_ambulance_by_id(db, ambulance_id)
+async def accept_dispatch(ambulance_id: int, db: AsyncSession = Depends(get_db)):
+    unit = await svc.get_ambulance_by_id(db, ambulance_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Ambulance not found.")
 
@@ -228,9 +219,9 @@ async def patient_pickup(
     ambulance_id: int,
     accident_lat: float = Query(..., description="Accident/pickup latitude"),
     accident_lon: float = Query(..., description="Accident/pickup longitude"),
-    db:           Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
+  """
     Driver has picked up patient.
 
     Root cause fix for hospital routing:
@@ -240,7 +231,7 @@ async def patient_pickup(
 
     Frontend uses response to render Route 2 on the map.
     """
-    unit = svc.get_ambulance_by_id(db, ambulance_id)
+    unit = await svc.get_ambulance_by_id(db, ambulance_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Ambulance not found.")
 
@@ -251,45 +242,45 @@ async def patient_pickup(
     nearest_hospital = hospitals[0]
 
     hospital_route_payload = {
-        "type":          "HOSPITAL_ROUTE",
-        "ambulance_id":  ambulance_id,
-        "pickup_lat":    accident_lat,
-        "pickup_lon":    accident_lon,
-        "hospital":      nearest_hospital,
-        "timestamp":     datetime.now(timezone.utc).isoformat(),
-        # Route 2 waypoints for Leaflet polyline
+        "type": "HOSPITAL_ROUTE",
+        "ambulance_id": ambulance_id,
+        "pickup_lat": accident_lat,
+        "pickup_lon": accident_lon,
+        "hospital": nearest_hospital,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "route": {
             "from": {"lat": accident_lat, "lon": accident_lon},
-            "to":   {
+            "to": {
                 "lat": nearest_hospital["latitude"],
                 "lon": nearest_hospital["longitude"],
             },
-            "type":          "ACCIDENT_TO_HOSPITAL",
+            "type": "ACCIDENT_TO_HOSPITAL",
             "hospital_name": nearest_hospital["name"],
-            "eta_minutes":   nearest_hospital["eta_minutes"],
-            "distance_km":   nearest_hospital["distance_km"],
+            "eta_minutes": nearest_hospital["eta_minutes"],
+            "distance_km": nearest_hospital["distance_km"],
         },
     }
 
-    # Deliver to driver + store for replay
     await ambulance_ws_manager.send_to_ambulance(ambulance_id, hospital_route_payload)
-    # Notify operator dashboard
     await ambulance_ws_manager.broadcast_all(hospital_route_payload)
 
     return {
-        "message":         "Patient picked up. Route to hospital generated.",
+        "message": "Patient picked up. Route to hospital generated.",
         "nearest_hospital": nearest_hospital,
-        "route_payload":   hospital_route_payload,
+        "route_payload": hospital_route_payload,
     }
 
 
 @router.post("/{ambulance_id}/complete")
 async def complete_dispatch(
     ambulance_id: int,
-    accident_id:  int = Query(None, description="Accident to mark resolved"),
-    db:           Session = Depends(get_db),
+    accident_id: int = Query(None, description="Accident to mark resolved"),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
+    unit, accident = await svc.complete_dispatch(db, ambulance_id, accident_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Ambulance not found.")
+ """
     Hospital reached. Marks:
       - Ambulance → available
       - Accident  → resolved (if accident_id provided)
@@ -298,9 +289,6 @@ async def complete_dispatch(
       Previously only ambulance status changed.
       Now both ambulance + accident are updated atomically.
     """
-    unit, accident = svc.complete_dispatch(db, ambulance_id, accident_id)
-    if not unit:
-        raise HTTPException(status_code=404, detail="Ambulance not found.")
 
     completion_payload = {
         "type":             "DISPATCH_COMPLETED",
