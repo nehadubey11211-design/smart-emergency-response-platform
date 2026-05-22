@@ -39,7 +39,7 @@ from typing import Optional
 import bcrypt
 import jwt
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,6 +52,8 @@ from app.schemas.user_schema import (
     UserLogin,
     UserResponse,
 )
+
+from app.main import limiter
 
 router = APIRouter()
 
@@ -133,7 +135,8 @@ async def get_current_user(
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
 )
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+@limiter.limit("3/hour")
+async def register(request: Request, user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == user_data.email))
     existing = result.scalar_one_or_none()
     if existing:
@@ -162,7 +165,8 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     summary="Login and receive an access token",
 )
 
-async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login(request: Request, credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 

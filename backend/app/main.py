@@ -42,16 +42,18 @@ from fastapi.responses import JSONResponse
 
 from app.config.settings import settings
 from app.database.db import engine, Base, check_database_connection, is_neon
-from app.routes import auth, accidents, traffic, analytics
-from app.routes.ambulance_routes import router as ambulance_router   
-
-from app.routes import password_reset
-
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+# Create the global limiter before importing routes so other modules can
+# import the same instance from app.main without causing circular imports.
 limiter = Limiter(key_func=get_remote_address)
+
+from app.routes import auth, accidents, traffic, analytics
+from app.routes.ambulance_routes import router as ambulance_router   
+
+from app.routes import password_reset
 
 
 

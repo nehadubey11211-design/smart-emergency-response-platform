@@ -254,7 +254,7 @@ async def complete_dispatch(
     ambulance_id: int,
     accident_id: Optional[int] = None,
 ) -> Tuple[Optional[Ambulance], Optional[Accident]]:
-  """
+    """
     Mark job complete:
       1. Set ambulance status → available
       2. If accident_id provided: set accident status → resolved + resolved_at

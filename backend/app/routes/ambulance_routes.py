@@ -71,7 +71,7 @@ async def get_nearby_hospitals(
     radius_km: float = Query(30.0),
     limit: int       = Query(3),
 ):
-     """
+    """
     Find nearest hospitals to a given location.
     Called by frontend after patient pickup to render Route 2.
     """
@@ -98,7 +98,7 @@ async def update_location(
     payload: AmbulanceLocationUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-  """
+    """
     GPS ping from ambulance device (called every ~5 seconds).
 
     Root cause fix for GPS tracking not working:
@@ -141,7 +141,7 @@ async def get_missed_alerts(
     ambulance_id: int,
     since: str = Query(None, description="ISO timestamp — return events after this"),
 ):
-   """
+    """
     Return stored alert events for an ambulance.
 
     Root cause fix for "alerts missed when dashboard was closed":
@@ -162,7 +162,7 @@ async def dispatch(
     accident_id: int = Query(None, description="Link dispatch to an accident record"),
     db: AsyncSession = Depends(get_db),
 ):
-   """
+    """
     Auto-dispatch nearest available ambulance.
     Pushes DISPATCH_ALERT to the assigned unit via WebSocket.
     Stores the event for offline replay.
@@ -221,7 +221,7 @@ async def patient_pickup(
     accident_lon: float = Query(..., description="Accident/pickup longitude"),
     db: AsyncSession = Depends(get_db),
 ):
-  """
+    """
     Driver has picked up patient.
 
     Root cause fix for hospital routing:
@@ -277,10 +277,7 @@ async def complete_dispatch(
     accident_id: int = Query(None, description="Accident to mark resolved"),
     db: AsyncSession = Depends(get_db),
 ):
-    unit, accident = await svc.complete_dispatch(db, ambulance_id, accident_id)
-    if not unit:
-        raise HTTPException(status_code=404, detail="Ambulance not found.")
- """
+    """
     Hospital reached. Marks:
       - Ambulance → available
       - Accident  → resolved (if accident_id provided)
@@ -289,6 +286,9 @@ async def complete_dispatch(
       Previously only ambulance status changed.
       Now both ambulance + accident are updated atomically.
     """
+    unit, accident = await svc.complete_dispatch(db, ambulance_id, accident_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Ambulance not found.")
 
     completion_payload = {
         "type":             "DISPATCH_COMPLETED",
