@@ -1,3 +1,10 @@
+"""
+FILE: backend/app/routes/hospital.py
+==================================================
+Hospital Route
+==================================================
+"""
+
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -31,3 +38,4 @@ async def seed_hospitals(db: AsyncSession = Depends(get_db), admin=Depends(get_a
     for hosp in created:
         await db.refresh(hosp)
     return created
+
