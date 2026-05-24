@@ -1,13 +1,8 @@
 """
 FILE : backend/app/models/ambulance.py
--------------------
+=================================================
 SQLAlchemy ORM model for the ambulances table.
-
-Interview talking point:
-  - Uses Python Enum so status is type-safe at both application + DB level
-  - ENUM in PostgreSQL enforces validity even if someone writes SQL directly
-  - last_updated uses server_default + onupdate so DB always tracks freshness
-    without the application needing to set it manually
+=================================================
 """
 
 import enum

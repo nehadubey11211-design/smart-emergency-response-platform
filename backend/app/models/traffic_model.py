@@ -4,10 +4,6 @@ FILE: backend/app/models/traffic_model.py
 SQLAlchemy ORM Model — Traffic Signals Table
 ================================================
 
-Each row represents one physical traffic signal controller in the field.
-The system communicates with these over IoT protocols (MQTT / HTTP) to
-switch them between normal and emergency modes.
-
 SIGNAL MODES:
   auto      — Normal timed cycle (default operation)
   emergency — Green corridor active (ambulance passing through)

@@ -6,29 +6,6 @@ FastAPI Application Entry Point
 
 FastAPI is a modern Python web framework built on top of Starlette (ASGI)
 and Pydantic.
-
-NEON MIGRATION CHANGES IN THIS FILE:
-  1. Added check_database_connection() call in the lifespan startup.
-     This "warms up" the Neon connection on startup, because Neon's
-     free tier suspends compute after 5 minutes of inactivity.
-     The first connection after suspension takes 1-2 seconds.
-     Calling it at startup means the first real user request won't be slow.
-
-  2. Added more descriptive startup logging to confirm which database
-     (Neon vs local) the app is connecting to.
-
-  3. The /health endpoint now also checks database connectivity,
-     which is more meaningful with a cloud database like Neon.
-
-EVERYTHING ELSE IS UNCHANGED:
-  - All routes, middleware, CORS configuration are identical.
-  - The app logic is completely database-agnostic.
-  - SQLAlchemy abstracts away the PostgreSQL vs Neon difference.
-
-INTERVIEW TALKING POINT:
-  "The only change to main.py for Neon was adding a startup connection
-  check. This warms up Neon's serverless compute so the first user
-  request isn't slow after a period of inactivity."
 """
 import asyncio
 import contextvars

@@ -6,19 +6,6 @@ SQLAlchemy ORM Model — Users Table
 
 A SQLAlchemy model is a Python class that maps to a database table.
 Each class attribute decorated with Column() maps to a table column.
-
-WHY SEPARATE MODELS FROM SCHEMAS?
-  Models (here) represent the database structure.
-  Schemas (schemas/user_schema.py) represent what the API accepts/returns.
-  Keeping them separate lets you:
-    - Expose only safe fields in the API (e.g. never return 'password')
-    - Have different validation rules for DB vs API
-    - Evolve DB structure independently of the API contract
-
-INTERVIEW TALKING POINT:
-  "I followed the repository pattern — models are responsible for DB shape,
-  schemas handle API validation, and services contain business logic.
-  This separation makes each layer independently testable."
 """
 
 from datetime import datetime, timezone

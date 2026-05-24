@@ -14,11 +14,6 @@ ENUM TYPES:
 
   SeverityLevel : How serious the incident is (drives alert priority)
   AccidentStatus: Current state in the response workflow
-
-INTERVIEW TALKING POINT:
-  "Using database-level ENUMs rather than just VARCHAR means the constraint
-  is enforced in the database itself — a critical safety net in production
-  where multiple services might write to the same database."
 """
 
 import enum

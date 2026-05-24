@@ -5,32 +5,9 @@ Authentication Endpoints
 ======================================
 
 Implements JWT (JSON Web Token) based stateless authentication.
-
 WHY JWT?
   Traditional session-based auth stores session data on the server.
   JWT auth encodes the user's identity INTO the token itself.
-
-  Benefits:
-    - Stateless: no session storage needed on the server
-    - Scalable: any server in a cluster can verify any token
-    - Self-contained: the token carries user ID, expiry, etc.
-
-  Trade-offs:
-    - Tokens can't be invalidated before expiry (use short TTL + refresh tokens)
-    - Token size is larger than a session ID
-
-TOKEN LIFECYCLE:
-  1. Client POSTs email+password to /login
-  2. Server verifies password hash with bcrypt
-  3. Server creates a JWT signed with SECRET_KEY, containing user_id + expiry
-  4. Client stores the token (localStorage / memory)
-  5. Client sends token in header: Authorization: Bearer <token>
-  6. Server decodes and verifies the token on every protected request
-
-INTERVIEW TALKING POINT:
-  "I chose bcrypt for password hashing because it has a configurable cost factor.
-  As hardware gets faster, you can increase the cost to keep brute-force
-  attacks equally slow, without changing the API."
 """
 
 from datetime import datetime, timedelta, timezone

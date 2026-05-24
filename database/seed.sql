@@ -1,10 +1,9 @@
+"""
 -- FILE: database/seed.sql
 -- ================================
 -- Development Seed Data
 -- ================================
--- Run AFTER schema.sql:
---   psql -U postgres -d emergency_db -f database/seed.sql
-
+"""
 
 -- ─── Users ────────────────────────────────────────────────────────────────────
 

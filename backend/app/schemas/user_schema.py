@@ -5,24 +5,8 @@ Pydantic Schemas — User Request & Response Validation
 ==============================================
 
 WHY PYDANTIC SCHEMAS?
-
   SQLAlchemy models define the DATABASE structure.
   Pydantic schemas define the API CONTRACT — what the API accepts and returns.
-
-  Keeping them separate is a best practice because:
-    1. SECURITY: We never accidentally return the hashed password in an API response
-    2. FLEXIBILITY: DB columns can change without breaking the API contract
-    3. VALIDATION: Pydantic validates types, required fields, and email format
-       automatically — no manual if/else checks needed
-    4. DOCUMENTATION: FastAPI generates Swagger UI from these schemas
-
-  The flow:
-    Client sends JSON → Pydantic validates it → Route handler gets clean object
-    Route handler queries DB → SQLAlchemy model → Pydantic serialises response
-
-INTERVIEW TALKING POINT:
-  "Pydantic runs validation at parse time, not at DB write time. So invalid
-  requests are rejected before they even hit the database — cleaner and faster."
 """
 
 from datetime import datetime

@@ -2,17 +2,6 @@
 FILE :backend/app/websockets/ambulance_manager.py
 ============================================
 Ambulance WebSocket Connection Manager
-
-Root cause fixes:
-  - Alerts missed when dashboard closed: store last N events in memory
-    so reconnecting clients can fetch missed events via REST
-  - Continuous reconnect loop: manager never causes side effects
-  - Pong/keepalive not stored as alerts: handled at route level
-
-Architecture:
-  - ambulance_id → WebSocket (one connection per unit)
-  - event_history: last 50 events per ambulance_id stored in memory
-    so /api/ambulances/{id}/missed-alerts endpoint can replay them
 """
 
 import logging

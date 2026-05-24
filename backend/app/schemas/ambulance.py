@@ -1,16 +1,8 @@
 """
 FILE : backend/app/schemas/ambulance.py
----------------------
+=========================================================
 Pydantic v2 schemas for the ambulance dispatch feature.
-
-Interview talking point:
-  - Schemas are deliberately separate from ORM models (never expose ORM objects
-    directly to the API layer — Pydantic catches malformed input before it hits
-    the DB, and prevents accidental field leakage in responses)
-  - NearbyAmbulanceResponse *extends* AmbulanceResponse by adding computed
-    fields (distance_km, eta_minutes) that are not stored in the DB
-  - DispatchResult is a composite response: it wraps the ambulance record
-    plus the dispatch metadata in one clean payload
+=========================================================
 """
 
 from __future__ import annotations

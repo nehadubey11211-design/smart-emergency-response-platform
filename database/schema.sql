@@ -1,10 +1,9 @@
+"""
 -- FILE: database/schema.sql
 -- ================================
 -- PostgreSQL Database Schema
 -- ================================
--- Run to initialise from scratch:
---   psql -U postgres -d emergency_db -f database/schema.sql
-
+"""
 
 -- ─── Cleanup ──────────────────────────────────────────────────────────────────
 

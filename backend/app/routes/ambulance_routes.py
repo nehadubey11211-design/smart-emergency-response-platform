@@ -1,8 +1,10 @@
 """
 FILE : backend/app/routes/ambulance_routes.py
+==================================================================
 REST + WebSocket endpoints for the ambulance dispatch lifecycle.
+==================================================================
 
-New endpoints added (root cause fixes):
+New endpoints added:
   GET  /ambulances/{id}/missed-alerts   → replay missed events on reconnect
   POST /ambulances/{id}/pickup          → patient picked up; find nearest hospital
   POST /ambulances/{id}/complete        → hospital reached; resolve accident

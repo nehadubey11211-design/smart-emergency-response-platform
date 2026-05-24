@@ -8,11 +8,6 @@ Three schema categories for accidents:
   1. AccidentCreate  — what the AI module POSTs when it detects something
   2. AccidentUpdate  — what an operator PATCHes (status/severity changes)
   3. AccidentResponse — what the API returns to the dashboard
-
-Using separate Create/Update/Response schemas is a standard REST API pattern:
-  - POST bodies often have fewer fields than stored records
-  - PATCH bodies should have ALL fields optional (partial update)
-  - Response adds server-generated fields (id, timestamps) the client never sends
 """
 
 from datetime import datetime
