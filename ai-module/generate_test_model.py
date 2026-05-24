@@ -18,19 +18,22 @@ Usage:
     python generate_test_model.py
 """
 
+import logging
 import os
 import sys
 
-print("=" * 55)
-print("Generating minimal test model for accident detection")
-print("=" * 55)
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(level=logging.INFO)
+
+logger.info("Generating minimal test model for accident detection")
 
 try:
     import tensorflow as tf
-    print(f"✅ TensorFlow {tf.__version__} found")
+    logger.info("TensorFlow %s found", tf.__version__)
 except ImportError:
-    print("❌ TensorFlow not installed.")
-    print("   Install it with: pip install tensorflow==2.16.1")
+    logger.error("TensorFlow not installed.")
+    logger.error("Install it with: pip install tensorflow==2.16.1")
     sys.exit(1)
 
 from tensorflow.keras.applications import MobileNetV2
@@ -43,7 +46,7 @@ MODEL_DIR  = os.path.join(os.path.dirname(__file__), "model")
 MODEL_PATH = os.path.join(MODEL_DIR, "accident_model.h5")
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-print("\n⏳ Building MobileNetV2 model (random weights, no ImageNet)...")
+logger.info("Building MobileNetV2 model (random weights, no ImageNet)...")
 
 # Build the SAME architecture as train_model.py
 # weights=None → random initialisation (no ImageNet download needed)
@@ -72,11 +75,11 @@ model.compile(
 model.save(MODEL_PATH)
 size_mb = os.path.getsize(MODEL_PATH) / (1024 * 1024)
 
-print(f"\n✅ Test model saved!")
-print(f"   Path:          {MODEL_PATH}")
-print(f"   File size:     {size_mb:.1f} MB")
-print(f"   Input shape:   {model.input_shape}")
-print(f"   Output shape:  {model.output_shape}")
-print(f"   Parameters:    {model.count_params():,}")
-print(f"\n⚠️  This model has RANDOM weights — predictions are meaningless.")
-print(f"   Run train_model.py with real dataset images for actual detection.")
+logger.info("Test model saved!")
+logger.info("Path: %s", MODEL_PATH)
+logger.info("File size: %.1f MB", size_mb)
+logger.info("Input shape: %s", model.input_shape)
+logger.info("Output shape: %s", model.output_shape)
+logger.info("Parameters: %s", f"{model.count_params():,}")
+logger.warning("This model has RANDOM weights — predictions are meaningless.")
+logger.warning("Run train_model.py with real dataset images for actual detection.")
