@@ -1,17 +1,13 @@
 """
 FILE : backend/app/models/ambulance.py
--------------------
+=================================================
 SQLAlchemy ORM model for the ambulances table.
-
-Interview talking point:
-  - Uses Python Enum so status is type-safe at both application + DB level
-  - ENUM in PostgreSQL enforces validity even if someone writes SQL directly
-  - last_updated uses server_default + onupdate so DB always tracks freshness
-    without the application needing to set it manually
+=================================================
 """
 
 import enum
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum as SAEnum
+from datetime import datetime, timezone
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum as SAEnum, Index
 from sqlalchemy.sql import func
 
 # Import the shared Base from your existing database module
@@ -62,8 +58,12 @@ class Ambulance(Base):
     last_updated = Column(
         DateTime(timezone=True),
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_ambulance_dispatch", "status", "latitude", "longitude"),
     )
 
     def __repr__(self) -> str:

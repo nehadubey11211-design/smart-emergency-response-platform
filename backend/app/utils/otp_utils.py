@@ -3,18 +3,6 @@ FILE: backend/app/utils/otp_utils.py
 ======================================
 OTP Generation & Password Hashing Utilities
 ======================================
-
-WHY A SEPARATE utils FILE INSTEAD OF PUTTING THIS IN THE SERVICE?
-  Same reason auth.py separates hash_password() and verify_password():
-  small, pure helper functions belong in utils — they have no side effects,
-  no DB access, and can be unit-tested in isolation with no mocks.
-
-PASSWORD HASHING NOTE:
-  This project already uses bcrypt in auth.py (via the `bcrypt` library directly).
-  We use the SAME approach here to stay consistent — one hashing strategy
-  across the whole codebase. Do not mix bcrypt and passlib in the same project.
-
-  See: backend/app/routes/auth.py → hash_password() and verify_password()
 """
 
 import secrets

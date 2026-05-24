@@ -18,7 +18,11 @@ CHANNELS SUPPORTED:
   ⬜ Push notification   (stub — for mobile app integration)
 """
 
+import logging
+
 from app.config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:
@@ -42,7 +46,7 @@ class NotificationService:
                 await channel_fn(accident)
             except Exception as e:
                 # Log the failure but continue with other channels
-                print(f"   ⚠️  Notification channel '{channel_name}' failed: {e}")
+                logger.warning("Notification channel '%s' failed: %s", channel_name, e)
 
     @staticmethod
     async def _log_to_console(accident) -> None:
@@ -51,22 +55,14 @@ class NotificationService:
         In production, replace with structured logging (e.g. structlog or loguru)
         to produce JSON logs that are parseable by tools like Datadog or Splunk.
         """
-        severity_icons = {
-            "critical": "🔴",
-            "high":     "🟠",
-            "medium":   "🟡",
-            "low":      "🟢",
-        }
-        icon = severity_icons.get(accident.severity, "⚪")
-
-        print(
-            f"\n{'─'*55}\n"
-            f"{icon} INCIDENT #{accident.id:04d} | {accident.severity.upper()}\n"
-            f"   📍 {accident.location}\n"
-            f"   📷 Camera : {accident.camera_id or 'Unknown'}\n"
-            f"   🤖 AI     : {(accident.confidence or 0)*100:.0f}% confidence\n"
-            f"   🕐 At     : {accident.detected_at.strftime('%d %b %H:%M:%S')}\n"
-            f"{'─'*55}\n"
+        logger.info(
+            "INCIDENT #%04d | %s | location=%s | camera=%s | confidence=%.0f%% | at=%s",
+            accident.id,
+            accident.severity.upper(),
+            accident.location,
+            accident.camera_id or "Unknown",
+            (accident.confidence or 0) * 100,
+            accident.detected_at.strftime("%d %b %H:%M:%S"),
         )
 
     @staticmethod

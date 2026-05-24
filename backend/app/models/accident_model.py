@@ -14,16 +14,11 @@ ENUM TYPES:
 
   SeverityLevel : How serious the incident is (drives alert priority)
   AccidentStatus: Current state in the response workflow
-
-INTERVIEW TALKING POINT:
-  "Using database-level ENUMs rather than just VARCHAR means the constraint
-  is enforced in the database itself — a critical safety net in production
-  where multiple services might write to the same database."
 """
 
 import enum
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Enum, ForeignKey, Index
 from sqlalchemy.sql import func
 
 from app.database.db import Base
@@ -84,17 +79,25 @@ class Accident(Base):
     latitude  = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
 
+    # Which ambulance was dispatched to this accident (nullable until assigned)
+    dispatched_ambulance_id = Column(
+        Integer,
+        ForeignKey("ambulances.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # ── Classification ──────────────────────────────────────────────────────
     # severity is set either by the AI (based on confidence) or by an operator
     severity = Column(
-        Enum(SeverityLevel),
+        Enum(SeverityLevel, name="severity_level"),
         default=SeverityLevel.medium,
         nullable=False,
     )
 
     # Status moves through the lifecycle: detected → responding → resolved
     status = Column(
-        Enum(AccidentStatus),
+        Enum(AccidentStatus, name="accident_status"),
         default=AccidentStatus.detected,
         nullable=False,
         index=True,   # Indexed because we frequently filter by status
@@ -126,6 +129,11 @@ class Accident(Base):
     # Nullable — only set when status transitions to "resolved"
     resolved_at = Column(DateTime(timezone=True), nullable=True)
 
+    __table_args__ = (
+        Index("ix_accident_status_detected", "status", detected_at.desc()),
+        Index("ix_accident_camera_detected", "camera_id", "detected_at"),
+    )
+
     def __repr__(self) -> str:
         return (
             f"<Accident id={self.id} location={self.location!r} "
@@ -140,8 +148,17 @@ class Accident(Base):
 
         This is a computed property — not stored in the DB, calculated on-demand.
         """
-        if self.resolved_at and self.detected_at:
-            delta = self.resolved_at - self.detected_at
-            return round(delta.total_seconds() / 60, 1)
-        return None
+        if not (self.resolved_at and self.detected_at):
+            return None
+
+        # Normalize both to aware UTC before subtraction
+        def to_utc(dt):
+            from datetime import timezone
+
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
+        delta = to_utc(self.resolved_at) - to_utc(self.detected_at)
+        return round(delta.total_seconds() / 60, 1)
     
