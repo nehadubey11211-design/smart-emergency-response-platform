@@ -38,7 +38,7 @@ import axios from "axios";
 // import.meta.env reads Vite environment variables defined in frontend/.env
 // VITE_API_URL=http://localhost:8000/api  (dev)
 // In production: VITE_API_URL=https://api.yourdomain.com/api
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 // ─── Axios Instance ───────────────────────────────────────────────────────────
 // Creating a custom instance lets us set defaults without affecting the
@@ -116,21 +116,21 @@ api.interceptors.response.use(
  * @returns {{ access_token: string, user: object }}
  */
 export const login = (credentials) =>
-  api.post("/auth/login", credentials);
+  api.post("v1/auth/login", credentials);
 
 /**
  * POST /api/auth/register
  * @param {{ name: string, email: string, password: string, role?: string }} data
  */
 export const register = (data) =>
-  api.post("/auth/register", data);
+  api.post("v1/auth/register", data);
 
 /**
  * GET /api/auth/me — returns the currently authenticated user's profile
  * @param {string} token — pass explicitly for page-load session restoration
  */
 export const getMe = (token) =>
-  api.get("/auth/me", { params: { token } });
+  api.get("v1/auth/me", { params: { token } });
 
 // ─── Password Reset API ─────────────────────────────────────────────────────
 
@@ -140,7 +140,7 @@ export const getMe = (token) =>
  * @param {{ email?: string, mobile?: string }} payload
  */
 export const sendResetOtp = (payload) =>
-  api.post("/auth/send-reset-otp", payload);
+  api.post("v1/auth/send-reset-otp", payload);
 
 /**
  * POST /api/auth/verify-reset-otp
@@ -148,7 +148,7 @@ export const sendResetOtp = (payload) =>
  * @param {{ email?: string, mobile?: string, otp: string }} payload
  */
 export const verifyResetOtp = (payload) =>
-  api.post("/auth/verify-reset-otp", payload);
+  api.post("v1/auth/verify-reset-otp", payload);
 
 /**
  * POST /api/auth/reset-password
@@ -156,7 +156,7 @@ export const verifyResetOtp = (payload) =>
  * @param {{ email?: string, mobile?: string, otp: string, new_password: string }} payload
  */
 export const resetPassword = (payload) =>
-  api.post("/auth/reset-password", payload);
+  api.post("v1/auth/reset-password", payload);
 
 
 // ─── Accidents API ────────────────────────────────────────────────────────────
