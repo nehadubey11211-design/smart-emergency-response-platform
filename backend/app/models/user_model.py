@@ -21,7 +21,9 @@ INTERVIEW TALKING POINT:
   This separation makes each layer independently testable."
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from datetime import datetime, timezone
+import enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
 from sqlalchemy.sql import func
 
 from app.database.db import Base
@@ -62,7 +64,11 @@ class User(Base):
 
     # Role-based access control (RBAC): simple string-based roles.
     # In a larger system you'd use a separate roles/permissions table.
-    role = Column(String(50), default="operator")
+    class UserRole(str, enum.Enum):
+      admin = "admin"
+      operator = "operator"
+
+    role = Column(Enum(UserRole, name="user_role"), default=UserRole.operator, nullable=False)
 
     # Soft delete: set is_active=False instead of DELETE-ing the row.
     # This preserves audit history and avoids foreign key issues.
@@ -79,9 +85,12 @@ class User(Base):
     # onupdate=func.now() tells SQLAlchemy to set this on every UPDATE.
     updated_at = Column(
         DateTime(timezone=True),
-        onupdate=func.now(),
+      onupdate=lambda: datetime.now(timezone.utc),
         nullable=True,
     )
+
+    # Tracks when the user last successfully authenticated
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         """String representation useful for debugging in logs."""

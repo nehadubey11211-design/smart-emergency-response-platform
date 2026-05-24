@@ -25,6 +25,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.ambulance import Ambulance, AmbulanceStatus
 from app.models.accident_model import Accident, AccidentStatus
+from app.models.hospital_model import Hospital
 from app.schemas.ambulance import (
     AmbulanceCreate,
     AmbulanceLocationUpdate,
@@ -38,16 +39,7 @@ _AVG_SPEED_KMH    = 40.0   # Urban ambulance average
 _DEFAULT_RADIUS   = 20.0   # km
 _HOSPITAL_RADIUS  = 30.0   # km search radius for hospitals
 
-# ── Static hospital registry (replace with DB table in production) ──────────
-# In production: CREATE TABLE hospitals (id, name, latitude, longitude, ...)
-HOSPITALS = [
-    {"id": "HOSP-001", "name": "KEM Hospital Pune",         "latitude": 18.5169, "longitude": 73.8478},
-    {"id": "HOSP-002", "name": "Ruby Hall Clinic",           "latitude": 18.5359, "longitude": 73.8809},
-    {"id": "HOSP-003", "name": "Jehangir Hospital",          "latitude": 18.5299, "longitude": 73.8800},
-    {"id": "HOSP-004", "name": "Sassoon General Hospital",   "latitude": 18.5175, "longitude": 73.8553},
-    {"id": "HOSP-005", "name": "Poona Hospital",             "latitude": 18.5284, "longitude": 73.8474},
-    {"id": "HOSP-006", "name": "Deenanath Mangeshkar Hospital", "latitude": 18.5008, "longitude": 73.8153},
-]
+# Hospitals are stored in the `hospitals` DB table (see models/hospital_model.py)
 
 
 # ═══════════════════════════════════════
@@ -194,25 +186,67 @@ async def dispatch_nearest_ambulance(
     db: AsyncSession,
     accident_lat: float,
     accident_lon: float,
+    accident_id: Optional[int] = None,
 ) -> Optional[DispatchResult]:
     """Auto-dispatch closest available unit and mark it busy."""
-    nearby = await get_nearby_ambulances(db, accident_lat, accident_lon, limit=1)
-    if not nearby:
+    # Step 1: get candidates with bounding box (approximate)
+    lat_delta = _DEFAULT_RADIUS / 110.574
+    lon_delta = _DEFAULT_RADIUS / (111.320 * math.cos(math.radians(accident_lat)))
+
+    stmt = (
+        select(Ambulance)
+        .where(
+            Ambulance.status == AmbulanceStatus.available,
+            Ambulance.latitude.isnot(None),
+            Ambulance.longitude.isnot(None),
+            Ambulance.latitude.between(accident_lat - lat_delta, accident_lat + lat_delta),
+            Ambulance.longitude.between(accident_lon - lon_delta, accident_lon + lon_delta),
+        )
+        .limit(10)
+    )
+
+    if getattr(db, "bind", None) is not None and db.bind.dialect.name != "sqlite":
+        stmt = stmt.with_for_update(skip_locked=True)
+
+    result = await db.execute(stmt)
+    candidates = result.scalars().all()
+    if not candidates:
         logger.warning("dispatch_nearest_ambulance: no available units.")
         return None
 
-    best     = nearby[0]
-    assigned = await update_status(db, best.id, AmbulanceStatus.busy)
-    if not assigned:
-        return None
+    best = min(
+        candidates,
+        key=lambda unit: haversine_distance(accident_lat, accident_lon, unit.latitude, unit.longitude),
+    )
+    dist = haversine_distance(accident_lat, accident_lon, best.latitude, best.longitude)
+
+    best.status = AmbulanceStatus.busy
+
+    # If an accident_id is provided, link the dispatched ambulance to the accident
+    accident = None
+    if accident_id:
+        result = await db.execute(select(Accident).where(Accident.id == accident_id))
+        accident = result.scalar_one_or_none()
+        if accident:
+            accident.dispatched_ambulance_id = best.id
+
+    try:
+        await db.commit()
+        await db.refresh(best)
+        if accident:
+            await db.refresh(accident)
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.error("dispatch_nearest_ambulance failed: %s", exc)
+        raise
 
     return DispatchResult(
-        ambulance   = assigned,
-        distance_km = best.distance_km,
-        eta_minutes = best.eta_minutes,
+        ambulance=best,
+        distance_km=round(dist, 2),
+        eta_minutes=estimate_eta(dist),
         message=(
-            f"Ambulance {assigned.ambulance_number} dispatched. "
-            f"ETA {best.eta_minutes} min."
+            f"Ambulance {best.ambulance_number} dispatched. "
+            f"ETA {estimate_eta(dist)} min."
         ),
     )
 
@@ -221,25 +255,41 @@ async def dispatch_nearest_ambulance(
 #  Hospital routing
 # ═══════════════════════════════════════
 
-def get_nearby_hospitals(
+async def get_nearby_hospitals(
+    db: AsyncSession,
     pickup_lat: float,
     pickup_lon: float,
     radius_km: float = _HOSPITAL_RADIUS,
     limit: int = 3,
 ) -> List[dict]:
     """
-    Find nearest hospitals to an accident/pickup location.
-    Returns list sorted by distance with distance_km + eta_minutes added.
-
-    Root cause fix: this was never called after pickup.
-    Now called from complete_pickup() route.
+    Query the `hospitals` table and return nearest active hospitals.
     """
+    lat_delta = radius_km / 110.574
+    lon_delta = radius_km / (111.320 * math.cos(math.radians(pickup_lat)))
+    min_lat, max_lat = pickup_lat - lat_delta, pickup_lat + lat_delta
+    min_lon, max_lon = pickup_lon - lon_delta, pickup_lon + lon_delta
+
+    result = await db.execute(
+        select(Hospital)
+        .where(
+            Hospital.is_active == True,
+            Hospital.latitude.between(min_lat, max_lat),
+            Hospital.longitude.between(min_lon, max_lon),
+        )
+        .limit(50)
+    )
+    candidates = result.scalars().all()
+
     results = []
-    for h in HOSPITALS:
-        dist = haversine_distance(pickup_lat, pickup_lon, h["latitude"], h["longitude"])
+    for h in candidates:
+        dist = haversine_distance(pickup_lat, pickup_lon, h.latitude, h.longitude)
         if dist <= radius_km:
             results.append({
-                **h,
+                "id": h.id,
+                "name": h.name,
+                "latitude": h.latitude,
+                "longitude": h.longitude,
                 "distance_km": round(dist, 2),
                 "eta_minutes": estimate_eta(dist),
             })

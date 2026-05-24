@@ -26,7 +26,7 @@ INTERVIEW TALKING POINT:
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -43,10 +43,11 @@ class UserCreate(BaseModel):
     name:     str      = Field(..., min_length=2, max_length=100,
                                description="Full display name")
     email:    EmailStr = Field(..., description="Unique login email")
-    password: str      = Field(..., min_length=8,
-                               description="Plaintext password (hashed before storage)")
-    role:     str      = Field(default="operator",
-                               description="User role: 'admin' or 'operator'")
+    password: str                     = Field(
+        ..., min_length=8,
+        description="Plaintext password (hashed before storage)",
+    )
+    role:     Literal["operator"] = "operator"
 
 
 class UserLogin(BaseModel):

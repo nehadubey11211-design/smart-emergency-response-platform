@@ -29,14 +29,14 @@ class AmbulanceCreate(BaseModel):
     """POST /ambulances/register"""
     ambulance_number: str  = Field(..., max_length=20,  example="AMB-001")
     driver_name:      str  = Field(..., max_length=100, example="Rahul Sharma")
-    latitude:  Optional[float] = Field(None, example=18.5204)
-    longitude: Optional[float] = Field(None, example=73.8567)
+    latitude:  Optional[float] = Field(None, ge=-90, le=90, example=18.5204)
+    longitude: Optional[float] = Field(None, ge=-180, le=180, example=73.8567)
 
 
 class AmbulanceLocationUpdate(BaseModel):
     """PUT /ambulances/{id}/location  — called every ~15 s by device"""
-    latitude:  float = Field(..., example=18.5204)
-    longitude: float = Field(..., example=73.8567)
+    latitude:  float = Field(..., ge=-90, le=90, example=18.5204)
+    longitude: float = Field(..., ge=-180, le=180, example=73.8567)
 
 
 class AmbulanceStatusUpdate(BaseModel):

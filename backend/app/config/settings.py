@@ -60,6 +60,7 @@ INTERVIEW TALKING POINT:
   compatible, so no schema, model, or query changes were needed."
 """
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from typing import List
 
@@ -77,7 +78,10 @@ class Settings(BaseSettings):
 
     # DEBUG=True enables hot-reload, verbose error messages, etc.
     # NEVER set this to True in production.
-    DEBUG: bool = True
+    DEBUG: bool = False
+
+    # deployment environment: development | staging | production
+    ENVIRONMENT: str = "development"
 
     # ── Database (NEON CONFIGURATION) ────────────────────────────────────────
     # CHANGED FROM LOCAL POSTGRESQL TO NEON:
@@ -97,16 +101,21 @@ class Settings(BaseSettings):
     #
     # THE ?sslmode=require PART IS MANDATORY — Neon rejects non-SSL connections.
     #
-    # For local development fallback (if Neon is not configured),
-    # we default to SQLite so the app still starts without crashing.
-    # REMOVE this default in production and make DATABASE_URL required.
-    DATABASE_URL: str = "sqlite:///./dev.db"
+    # DATABASE_URL must be provided in the environment.
+    DATABASE_URL: str
 
     # ── JWT (JSON Web Token) Authentication ──────────────────────────────────
     # SECRET_KEY is used to sign JWT tokens. Anyone with this key can forge
     # valid tokens, so use a long random string in production.
     # Generate one with: python -c "import secrets; print(secrets.token_hex(32))"
-    SECRET_KEY: str = "change-me-in-production"
+    SECRET_KEY: str
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters long")
+        return v
 
 
     # Algorithm used to sign JWTs. HS256 is HMAC + SHA-256 (symmetric).
@@ -127,11 +136,16 @@ class Settings(BaseSettings):
     MODEL_PATH: str = "../ai-module/model/accident_model.h5"
     CONFIDENCE_THRESHOLD: float = 0.75
 
+    # Feature flags
+    CORRIDOR_SPATIAL_FILTERING_ENABLED: bool = False
+
     # ── Email Notifications (SMTP) ────────────────────────────────────────────
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
+    ALERT_RECIPIENTS: List[str] = []
+    FRONTEND_URL: str = "http://localhost:5173"
 
     # ── Neon-specific settings ────────────────────────────────────────────────
     # These are used in db.py to configure the SQLAlchemy engine properly
@@ -150,6 +164,10 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "ignore"
+
+    # ── Redis ───────────────────────────────────────────────────────────────
+    # URL for Redis used for OTP storage and optional pub/sub/event history.
+    REDIS_URL: str = "redis://localhost:6379"
 
 
 # ── Singleton Instance ────────────────────────────────────────────────────────

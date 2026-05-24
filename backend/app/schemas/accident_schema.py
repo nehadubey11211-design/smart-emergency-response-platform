@@ -18,7 +18,7 @@ Using separate Create/Update/Response schemas is a standard REST API pattern:
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.accident_model import SeverityLevel, AccidentStatus
 
@@ -53,6 +53,12 @@ class AccidentCreate(BaseModel):
 
     # Auto-generated description from AI or entered by operator
     description: Optional[str] = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_gps_pair(self):
+      if (self.latitude is None) != (self.longitude is None):
+        raise ValueError("latitude and longitude must both be provided or both omitted")
+      return self
 
 
 # ─── Update Schema ────────────────────────────────────────────────────────────
