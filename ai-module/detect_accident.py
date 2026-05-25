@@ -652,4 +652,5 @@ def run_detection() -> None:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     run_detection()

@@ -25,12 +25,15 @@ INTERVIEW TALKING POINT:
   This made it trivial to mock the service in unit tests."
 """
 
-import smtplib
+import aiosmtplib
+import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape
 
 from app.config.settings import settings
 
+logger = logging.getLogger(__name__)
 
 class AlertService:
     """
@@ -49,19 +52,23 @@ class AlertService:
         Using async def because callers await it, and future implementations
         may include async HTTP calls (e.g. SendGrid, Twilio API).
         """
-        print(
-            f"📧 Sending alert for accident #{accident.id} "
-            f"at {accident.location} [{accident.severity.upper()}]"
+        logger.info(
+            "Sending alert for accident #%s at %s [%s]",
+            accident.id,
+            accident.location,
+            accident.severity.upper(),
         )
 
         # Only attempt email if SMTP is configured
         if settings.SMTP_USER and settings.SMTP_PASSWORD:
-            AlertService._send_email(accident)
+            await AlertService._send_email(accident)
         else:
-            print("   ℹ️  Email not configured — set SMTP_USER and SMTP_PASSWORD in .env")
+            logger.warning(
+                "Email not configured — set SMTP_USER and SMTP_PASSWORD in .env"
+            )
 
     @staticmethod
-    def _send_email(accident) -> None:
+    async def _send_email(accident) -> None:
         """
         Send an HTML email to emergency team operators via SMTP.
 
@@ -80,6 +87,13 @@ class AlertService:
             "low":      "#00E676",
         }
         colour = severity_colours.get(accident.severity, "#888888")
+        dashboard_url = f"{settings.FRONTEND_URL.rstrip('/')}/dashboard"
+
+        safe_location = escape(str(accident.location))
+        safe_severity_upper = escape(str(accident.severity).upper())
+        safe_camera = escape(str(accident.camera_id or "Unknown"))
+        safe_detected_at = escape(str(accident.detected_at))
+        safe_confidence = escape(f"{(accident.confidence or 0) * 100:.0f}%")
 
         subject = (
             f"🚨 [{accident.severity.upper()}] Accident Detected — {accident.location}"
@@ -95,7 +109,7 @@ AI Score  : {(accident.confidence or 0) * 100:.0f}% confidence
 Camera    : {accident.camera_id or 'Unknown'}
 Detected  : {accident.detected_at}
 
-Open Dashboard: http://localhost:5173/dashboard
+Open Dashboard: {dashboard_url}
         """.strip()
 
         # HTML email for modern clients
@@ -106,17 +120,17 @@ Open Dashboard: http://localhost:5173/dashboard
             <h2 style="color: {colour}; margin: 0 0 16px;">🚨 ACCIDENT DETECTED</h2>
             <table style="width: 100%; border-collapse: collapse;">
               <tr><td style="color: #8899aa; padding: 4px 0;">Location</td>
-                  <td style="font-weight: bold;">{accident.location}</td></tr>
+                  <td style="font-weight: bold;">{safe_location}</td></tr>
               <tr><td style="color: #8899aa; padding: 4px 0;">Severity</td>
-                  <td style="color: {colour}; font-weight: bold;">{accident.severity.upper()}</td></tr>
+                  <td style="color: {colour}; font-weight: bold;">{safe_severity_upper}</td></tr>
               <tr><td style="color: #8899aa; padding: 4px 0;">AI Confidence</td>
-                  <td>{(accident.confidence or 0) * 100:.0f}%</td></tr>
+                  <td>{safe_confidence}</td></tr>
               <tr><td style="color: #8899aa; padding: 4px 0;">Camera</td>
-                  <td>{accident.camera_id or 'Unknown'}</td></tr>
+                  <td>{safe_camera}</td></tr>
               <tr><td style="color: #8899aa; padding: 4px 0;">Time</td>
-                  <td>{accident.detected_at}</td></tr>
+                  <td>{safe_detected_at}</td></tr>
             </table>
-            <a href="http://localhost:5173/dashboard"
+            <a href="{dashboard_url}"
                style="display: inline-block; margin-top: 16px; padding: 10px 20px;
                       background: {colour}; color: white; text-decoration: none;
                       border-radius: 4px; font-weight: bold;">
@@ -126,23 +140,29 @@ Open Dashboard: http://localhost:5173/dashboard
         </body></html>
         """
 
+        recipients = settings.ALERT_RECIPIENTS or [settings.SMTP_USER]
+
         # Build MIME message with both text and HTML parts
         # Email clients render HTML if supported, fall back to text
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"]    = settings.SMTP_USER
-        msg["To"]      = settings.SMTP_USER  # Production: use a distribution list
+        msg["To"]      = ", ".join(recipients)
 
         msg.attach(MIMEText(text_body, "plain"))
         msg.attach(MIMEText(html_body,  "html"))
 
         try:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                server.ehlo()            # Identify ourselves to the server
-                server.starttls()        # Upgrade to encrypted connection
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                server.send_message(msg)
-            print("   ✅ Alert email sent successfully")
-        except smtplib.SMTPException as e:
-            # Don't crash the endpoint if email fails — just log the error
-            print(f"   ⚠️  Email send failed: {e}")
+            await aiosmtplib.send(
+                msg,
+                hostname=settings.SMTP_HOST,
+                port=settings.SMTP_PORT,
+                username=settings.SMTP_USER,
+                password=settings.SMTP_PASSWORD,
+                recipients=recipients,
+                use_tls=False,
+                start_tls=True,
+            )
+            logger.info("Alert email sent for accident #%d", accident.id)
+        except Exception as e:
+            logger.error("Alert email failed: %s", e)

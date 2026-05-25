@@ -3,13 +3,6 @@ FILE: backend/app/schemas/password_reset_schema.py
 =====================================================
 Pydantic Schemas — Password Reset Request & Response
 =====================================================
-
-Follows the same schema pattern used in user_schema.py:
-  - Request schemas validate what the CLIENT sends
-  - Response schemas define what the SERVER returns
-
-These schemas are intentionally minimal — only the fields
-each step of the OTP flow actually needs.
 """
 
 from pydantic import BaseModel, EmailStr, Field

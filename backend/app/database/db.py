@@ -1,8 +1,19 @@
-﻿from sqlalchemy import event, text
+﻿"""
+FILE: backend/app/database/db.py
+==================================================
+Database Configuration & Connection Management
+==================================================
+"""
+
+import logging
+
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 
 from app.config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Detect Database Type ─────────────────────────────────────────────────────
@@ -13,9 +24,9 @@ is_neon    = "neon.tech"      in settings.DATABASE_URL
 is_sqlite  = "sqlite"         in settings.DATABASE_URL
 is_local_pg = "postgresql" in settings.DATABASE_URL and not is_neon
 
-print(
-    "🗄️  Database type detected: "
-    f"{'Neon serverless PostgreSQL' if is_neon else 'SQLite (local dev)' if is_sqlite else 'Local PostgreSQL'}"
+logger.info(
+    "Database type detected: %s",
+    "Neon serverless PostgreSQL" if is_neon else "SQLite (local dev)" if is_sqlite else "Local PostgreSQL",
 )
 
 
@@ -37,11 +48,15 @@ def make_async_url(url: str) -> str:
 def build_engine_kwargs() -> dict:
     if is_neon:
         return {
+            "connect_args": {                         
+                "ssl": True,                          
+                "prepared_statement_cache_size": 0,
+            },     
             "pool_pre_ping": True,
             "pool_size": 5,
             "max_overflow": 5,
             "pool_timeout": 30,
-            "pool_recycle": 300,
+            "pool_recycle": 240,
             "echo": False ,
         }
 
@@ -130,11 +145,11 @@ async def check_database_connection() -> bool:
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        print(
-            "✅ Database connection verified"
-            f" ({'Neon' if is_neon else 'SQLite' if is_sqlite else 'PostgreSQL'})"
+        logger.info(
+            "Database connection verified (%s)",
+            "Neon" if is_neon else "SQLite" if is_sqlite else "PostgreSQL",
         )
         return True
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        logger.error("Database connection failed: %s", e)
         return False

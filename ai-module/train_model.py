@@ -65,7 +65,6 @@ REPRODUCIBILITY:
 
 """
 
-# ── Determinism — must be set before any other imports ───────────────────────
 import os
 os.environ["PYTHONHASHSEED"]        = "42"
 os.environ["TF_DETERMINISTIC_OPS"]  = "1"
@@ -659,4 +658,5 @@ def main() -> None:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()

@@ -5,12 +5,16 @@ OTP Service — Core Password Reset Business Logic
 ==========================================
 """
 
-import smtplib
+import aiosmtplib
 import logging
+import hmac
+import hashlib
+import json
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import redis.asyncio as aioredis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +23,11 @@ from app.utils.otp_utils import generate_otp, hash_password
 
 logger = logging.getLogger(__name__)
 
-_otp_store: dict[str, dict] = {}
+# Redis client (async)
+redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+OTP_TTL_SECONDS = 300  # 5 minutes
+OTP_MAX_ATTEMPTS = 3
 
 
 class OTPService:
@@ -36,10 +44,10 @@ class OTPService:
             raise ValueError("This account has been deactivated. Contact an administrator.")
 
         otp = generate_otp()
-        OTPService._store_otp(email=email, otp=otp, expiry_minutes=5)
-        OTPService._send_otp_email(recipient_email=email, otp=otp, user_name=user.name)
+        await OTPService._store_otp(email=email, otp=otp)
+        await OTPService._send_otp_email(recipient_email=email, otp=otp, user_name=user.name)
 
-        print(f"🔐 OTP generated and sent to {email} (user: {user.name})")
+        logger.info("OTP generated and sent to %s (user: %s)", email, user.name)
         return f"OTP sent to {email}. It is valid for 5 minutes."
 
     @staticmethod
@@ -51,7 +59,7 @@ class OTPService:
     ) -> str:
         from app.models.user_model import User
 
-        is_valid, reason = OTPService._verify_otp(email=email, submitted_otp=otp)
+        is_valid, reason = await OTPService._verify_otp(email=email, submitted_otp=otp)
         if not is_valid:
             if reason == "locked":
                 raise ValueError(
@@ -76,49 +84,53 @@ class OTPService:
 
         user.password = hash_password(new_password)
         await db.commit()
-        print(f"✅ Password updated in DB for user: {email}")
+        logger.info("Password updated in DB for user: %s", email)
 
-        OTPService._delete_otp(email)
+        await OTPService._delete_otp(email)
         return "Password reset successfully. You can now log in with your new password."
 
     @staticmethod
-    def _store_otp(email: str, otp: str, expiry_minutes: int = 5) -> None:
-        _otp_store[email] = {
-            "otp":        otp,
-            "expires_at": datetime.utcnow() + timedelta(minutes=expiry_minutes),
-            "attempts": 0,
-        }
-        logger.debug(f"OTP stored for {email}, expires in {expiry_minutes}m")
+    async def _store_otp(email: str, otp: str) -> None:
+        # Hash the OTP before storing (never store plaintext)
+        otp_hash = hmac.new(settings.SECRET_KEY.encode(), otp.encode(), hashlib.sha256).hexdigest()
+        key = f"otp:{email}"
+        await redis_client.setex(key, OTP_TTL_SECONDS, json.dumps({
+            "otp_hash": otp_hash,
+            "attempts": 0
+        }))
+        logger.debug(f"OTP stored for {email} with TTL {OTP_TTL_SECONDS}s")
 
     @staticmethod
-    def _verify_otp(email: str, submitted_otp: str) -> tuple[bool, str]:
-        record = _otp_store.get(email)
-
-        if not record:
+    async def _verify_otp(email: str, submitted_otp: str) -> tuple[bool, str]:
+        key = f"otp:{email}"
+        raw = await redis_client.get(key)
+        if not raw:
             return False, "not_found"
 
-        if datetime.utcnow() > record["expires_at"]:
-            OTPService._delete_otp(email)
-            return False, "expired"
-
-        if record["attempts"] >= 3:
-            OTPService._delete_otp(email)
+        record = json.loads(raw)
+        if record.get("attempts", 0) >= OTP_MAX_ATTEMPTS:
+            await redis_client.delete(key)
             return False, "locked"
 
-        if record["otp"] != submitted_otp:
-            record["attempts"] += 1
-            remaining = 3 - record["attempts"]
-            logger.warning(f"Wrong OTP for {email} — {remaining} attempt(s) left")
+        expected_hash = hmac.new(settings.SECRET_KEY.encode(), submitted_otp.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(record["otp_hash"], expected_hash):
+            record["attempts"] = record.get("attempts", 0) + 1
+            remaining_ttl = await redis_client.ttl(key)
+            # Ensure TTL is at least 1 second when rewriting
+            await redis_client.setex(key, max(remaining_ttl, 1), json.dumps(record))
+            remaining = OTP_MAX_ATTEMPTS - record["attempts"]
             return False, f"invalid:{remaining}"
 
+        await redis_client.delete(key)
         return True, "valid"
 
     @staticmethod
-    def _delete_otp(email: str) -> None:
-        _otp_store.pop(email, None)
+    async def _delete_otp(email: str) -> None:
+        key = f"otp:{email}"
+        await redis_client.delete(key)
 
     @staticmethod
-    def _send_otp_email(recipient_email: str, otp: str, user_name: str) -> None:
+    async def _send_otp_email(recipient_email: str, otp: str, user_name: str) -> None:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "🔐 Your Password Reset OTP — Smart AI Emergency Response"
         msg["From"] = settings.SMTP_USER
@@ -191,10 +203,16 @@ If you did not request this, please ignore this email — your password is uncha
         msg.attach(MIMEText(plain_text, "plain"))
         msg.attach(MIMEText(html_content, "html"))
 
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.send_message(msg)
-
-        print(f"   ✅ OTP email sent to {recipient_email}")
+        try:
+            await aiosmtplib.send(
+                msg,
+                hostname=settings.SMTP_HOST,
+                port=settings.SMTP_PORT,
+                username=settings.SMTP_USER,
+                password=settings.SMTP_PASSWORD,
+                use_tls=False,
+                start_tls=True,
+            )
+            logger.info("OTP email sent to %s", recipient_email)
+        except Exception as e:
+            logger.error("OTP email failed for %s: %s", recipient_email, e)

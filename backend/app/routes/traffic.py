@@ -12,7 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
-from app.models.traffic_model import TrafficSignal, SignalMode
+from app.routes.auth import get_current_user_from_header
+from app.models.traffic_model import TrafficSignal, SignalMode, TrafficSignalEvent
 from app.services.traffic_services import TrafficService
 
 router = APIRouter()
@@ -58,7 +59,11 @@ async def get_signal(signal_id: str, db: AsyncSession = Depends(get_db)):
     "/signals/{signal_id}/emergency",
     summary="Activate emergency (green corridor) mode on a signal",
 )
-async def activate_emergency(signal_id: str, db: AsyncSession = Depends(get_db)):
+async def activate_emergency(
+    signal_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
+):
     result = await db.execute(select(TrafficSignal).where(TrafficSignal.signal_id == signal_id))
     signal = result.scalar_one_or_none()
 
@@ -74,7 +79,17 @@ async def activate_emergency(signal_id: str, db: AsyncSession = Depends(get_db))
             detail=f"Signal '{signal_id}' is offline",
         )
 
+    old_mode = signal.current_mode
     signal.current_mode = SignalMode.emergency
+    # Log the state transition in the audit table
+    event = TrafficSignalEvent(
+        signal_id=signal.signal_id,
+        from_mode=old_mode,
+        to_mode=SignalMode.emergency,
+        triggered_by=f"operator:{current_user.id}",
+    )
+    db.add(event)
+
     await db.commit()
 
     await TrafficService.send_signal_command(signal_id, "EMERGENCY_GREEN")
@@ -90,7 +105,11 @@ async def activate_emergency(signal_id: str, db: AsyncSession = Depends(get_db))
     "/signals/{signal_id}/reset",
     summary="Reset a signal back to automatic timed mode",
 )
-async def reset_signal(signal_id: str, db: AsyncSession = Depends(get_db)):
+async def reset_signal(
+    signal_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
+):
     result = await db.execute(select(TrafficSignal).where(TrafficSignal.signal_id == signal_id))
     signal = result.scalar_one_or_none()
 
@@ -100,7 +119,17 @@ async def reset_signal(signal_id: str, db: AsyncSession = Depends(get_db)):
             detail=f"Signal '{signal_id}' not found",
         )
 
+    old_mode = signal.current_mode
     signal.current_mode = SignalMode.auto
+    # Log reset event
+    event = TrafficSignalEvent(
+        signal_id=signal.signal_id,
+        from_mode=old_mode,
+        to_mode=SignalMode.auto,
+        triggered_by=f"operator:{current_user.id}",
+    )
+    db.add(event)
+
     await db.commit()
 
     await TrafficService.send_signal_command(signal_id, "RESUME_AUTO")
@@ -120,6 +149,7 @@ async def create_green_corridor(
     accident_id: int,
     hospital_id: str,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
 ):
     result = await TrafficService.create_green_corridor(accident_id, hospital_id, db)
     return result
@@ -129,7 +159,10 @@ async def create_green_corridor(
     "/reset-corridor",
     summary="Reset all signals from emergency back to auto",
 )
-async def reset_corridor(db: AsyncSession = Depends(get_db)):
+async def reset_corridor(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
+):
     result = await db.execute(
         select(TrafficSignal).where(TrafficSignal.current_mode == SignalMode.emergency)
     )

@@ -5,12 +5,14 @@ Accident CRUD Endpoints + WebSocket Live Feed
 ===========================================
 """
 
+import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 from app.integrations.accident_dispatch import trigger_ambulance_dispatch
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +27,15 @@ from app.schemas.accident_schema import (
 from app.services.alert_services import AlertService
 from app.services.notification_services import NotificationService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+VALID_TRANSITIONS = {
+    AccidentStatus.detected:   {AccidentStatus.responding, AccidentStatus.resolved},
+    AccidentStatus.responding: {AccidentStatus.resolved},
+    AccidentStatus.resolved:   set(),
+}
 
 
 class ConnectionManager:
@@ -35,12 +45,12 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        print(f"🔗 WS client connected. Total: {len(self.active_connections)}")
+        logger.info("WS client connected. Total: %s", len(self.active_connections))
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        print(f"🔌 WS client disconnected. Remaining: {len(self.active_connections)}")
+        logger.info("WS client disconnected. Remaining: %s", len(self.active_connections))
 
     async def broadcast(self, message: dict):
         disconnected = []
@@ -57,11 +67,21 @@ manager = ConnectionManager()
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
+    if decode_token(token) is None:
+        await websocket.close(code=1008)
+        return
+
     await manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()
+            try:
+                await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+            except asyncio.TimeoutError:
+                try:
+                    await websocket.send_text('{"type":"ping"}')
+                except Exception:
+                    break
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
@@ -72,8 +92,8 @@ async def websocket_endpoint(websocket: WebSocket):
     summary="List all accidents",
 )
 async def get_accidents(
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
@@ -96,13 +116,19 @@ async def get_accidents(
 async def create_accident(
     accident_data: AccidentCreate,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
 ):
     accident = Accident(**accident_data.model_dump())
     db.add(accident)
     await db.commit()
     await db.refresh(accident)
 
-    print(f"🚨 New accident #{accident.id} at {accident.location} [{accident.severity}]")
+    logger.info(
+        "New accident #%s at %s [%s]",
+        accident.id,
+        accident.location,
+        accident.severity,
+    )
 
     await manager.broadcast({
         "type": "NEW_ACCIDENT",
@@ -158,6 +184,7 @@ async def update_accident(
     accident_id: int,
     update_data: AccidentUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
 ):
     result = await db.execute(select(Accident).where(Accident.id == accident_id))
     accident = result.scalar_one_or_none()
@@ -166,6 +193,17 @@ async def update_accident(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Accident with id={accident_id} not found",
         )
+
+    if update_data.status and update_data.status != accident.status:
+        allowed = VALID_TRANSITIONS.get(accident.status, set())
+        if update_data.status not in allowed:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Invalid transition: {accident.status} → {update_data.status}. "
+                    f"Allowed: {[s.value for s in allowed] or 'none (terminal state)'}"
+                ),
+            )
 
     updates = update_data.model_dump(exclude_unset=True)
     for field, value in updates.items():
@@ -184,7 +222,11 @@ async def update_accident(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an accident record (admin only)",
 )
-async def delete_accident(accident_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_accident(
+    accident_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user = Depends(get_admin_user),
+):
     result = await db.execute(select(Accident).where(Accident.id == accident_id))
     accident = result.scalar_one_or_none()
     if not accident:

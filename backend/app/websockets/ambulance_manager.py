@@ -2,44 +2,32 @@
 FILE :backend/app/websockets/ambulance_manager.py
 ============================================
 Ambulance WebSocket Connection Manager
-
-Root cause fixes:
-  - Alerts missed when dashboard closed: store last N events in memory
-    so reconnecting clients can fetch missed events via REST
-  - Continuous reconnect loop: manager never causes side effects
-  - Pong/keepalive not stored as alerts: handled at route level
-
-Architecture:
-  - ambulance_id → WebSocket (one connection per unit)
-  - event_history: last 50 events per ambulance_id stored in memory
-    so /api/ambulances/{id}/missed-alerts endpoint can replay them
 """
 
 import logging
-from collections import defaultdict, deque
+import json
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+import redis.asyncio as aioredis
 from fastapi import WebSocket
+
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# How many events to keep in memory per ambulance (for replay on reconnect)
-EVENT_HISTORY_SIZE = 50
+# Redis client for storing event history (streams)
+redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+STREAM_MAXLEN = 100
+GLOBAL_STREAM_KEY = "ambulance:events:global"
+GLOBAL_STREAM_MAXLEN = 200
 
 
 class AmbulanceConnectionManager:
     def __init__(self) -> None:
         # ambulance_id → active WebSocket
         self._connections: Dict[int, WebSocket] = {}
-
-        # ambulance_id → deque of last N events (for missed-alert replay)
-        self._event_history: Dict[int, deque] = defaultdict(
-            lambda: deque(maxlen=EVENT_HISTORY_SIZE)
-        )
-
-        # Global event log (for operator dashboard queries)
-        self._global_history: deque = deque(maxlen=200)
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -64,26 +52,30 @@ class AmbulanceConnectionManager:
 
     # ── Messaging ──────────────────────────────────────────────────────────
 
-    def _store_event(self, ambulance_id: int, payload: dict) -> None:
+    async def _store_event(self, ambulance_id: int, payload: dict) -> None:
         """
-        Persist event in memory so reconnecting clients can retrieve it.
+        Persist event in Redis Streams so reconnecting clients can retrieve it.
         Only stores real alert events (not pong/keepalive).
         """
         ALERT_TYPES = {
             "DISPATCH_ALERT", "NEARBY_ACCIDENT_ALERT",
-            "DISPATCH_ACCEPTED", "DISPATCH_COMPLETED", "LOCATION_UPDATE",
+            "DISPATCH_ACCEPTED", "DISPATCH_COMPLETED", "LOCATION_UPDATE", "HOSPITAL_ROUTE",
         }
-        if payload.get("type") in ALERT_TYPES:
-            stamped = {**payload, "server_timestamp": datetime.now(timezone.utc).isoformat()}
-            self._event_history[ambulance_id].append(stamped)
-            self._global_history.append({**stamped, "ambulance_id": ambulance_id})
+        if payload.get("type") not in ALERT_TYPES:
+            return
+        stamped = {**payload, "server_timestamp": datetime.now(timezone.utc).isoformat()}
+        stream_key = f"ambulance:events:{ambulance_id}"
+        # Add to per-ambulance stream
+        await redis_client.xadd(stream_key, {"data": json.dumps(stamped)}, maxlen=STREAM_MAXLEN)
+        # Add to global stream with ambulance_id included
+        await redis_client.xadd(GLOBAL_STREAM_KEY, {"data": json.dumps({**stamped, "ambulance_id": ambulance_id})}, maxlen=GLOBAL_STREAM_MAXLEN)
 
     async def send_to_ambulance(self, ambulance_id: int, payload: dict) -> bool:
         """
         Send to ONE ambulance. Returns True if delivered via WS.
         Always stores in history regardless of delivery.
         """
-        self._store_event(ambulance_id, payload)
+        await self._store_event(ambulance_id, payload)
 
         ws = self._connections.get(ambulance_id)
         if not ws:
@@ -105,7 +97,7 @@ class AmbulanceConnectionManager:
         """Push awareness alert to multiple nearby units."""
         stale: List[int] = []
         for amb_id in ambulance_ids:
-            self._store_event(amb_id, payload)
+            await self._store_event(amb_id, payload)
             ws = self._connections.get(amb_id)
             if not ws:
                 continue
@@ -121,7 +113,7 @@ class AmbulanceConnectionManager:
         """Send system-wide message to every connected unit."""
         stale: List[int] = []
         for amb_id, ws in list(self._connections.items()):
-            self._store_event(amb_id, payload)
+            await self._store_event(amb_id, payload)
             try:
                 await ws.send_json(payload)
             except Exception:
@@ -131,7 +123,7 @@ class AmbulanceConnectionManager:
 
     # ── Replay / History ───────────────────────────────────────────────────
 
-    def get_missed_alerts(
+    async def get_missed_alerts(
         self, ambulance_id: int, since_iso: Optional[str] = None
     ) -> List[dict]:
         """
@@ -141,21 +133,29 @@ class AmbulanceConnectionManager:
         This is the fix for "alerts missed when dashboard was closed":
         client reconnects → fetches missed alerts → renders them.
         """
-        history = list(self._event_history.get(ambulance_id, []))
+        stream_key = f"ambulance:events:{ambulance_id}"
         if since_iso:
             try:
-                since = datetime.fromisoformat(since_iso)
-                history = [
-                    e for e in history
-                    if datetime.fromisoformat(e.get("server_timestamp", "1970-01-01")) > since
-                ]
-            except ValueError:
-                pass
-        return history
+                since_dt = datetime.fromisoformat(since_iso)
+                since_ms = int(since_dt.timestamp() * 1000)
+                entries = await redis_client.xrange(stream_key, min=f"{since_ms}-0")
+            except Exception:
+                entries = await redis_client.xrange(stream_key)
+        else:
+            entries = await redis_client.xrange(stream_key)
+        # entries: list of (id, {field: value})
+        return [json.loads(e[1]["data"]) for e in entries]
 
-    def get_global_history(self, limit: int = 50) -> List[dict]:
+    async def get_global_history(self, limit: int = 50) -> List[dict]:
         """For operator dashboard — recent events across all ambulances."""
-        return list(self._global_history)[-limit:]
+        # Use XRANGE/XREVRANGE to get the most recent `limit` entries from the global stream
+        try:
+            entries = await redis_client.xrevrange(GLOBAL_STREAM_KEY, count=limit)
+            # xrevrange returns newest → oldest; reverse to chronological
+            entries = list(reversed(entries))
+            return [json.loads(e[1]["data"]) for e in entries]
+        except Exception:
+            return []
 
     @property
     def connected_ids(self) -> List[int]:

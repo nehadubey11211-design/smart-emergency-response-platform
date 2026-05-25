@@ -36,9 +36,9 @@
  *   knowing about the other subscribers — they're fully decoupled."
  */
 
-const WS_URL =
-  import.meta.env.VITE_WS_URL ||
-  "ws://localhost:8000/api/accidents/ws";
+// const WS_URL =
+//   import.meta.env.VITE_WS_URL ||
+//   "ws://localhost:8000/v1/api/accidents/ws";
 
 class SocketService {
   constructor() {
@@ -71,9 +71,19 @@ class SocketService {
       return;
     }
 
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+    if (!token) {
+      console.warn("🔌 No auth token — skipping accident WS connection");
+      return;
+    }
+
     this._intentionalDisconnect = false;
-    console.log(`🔗 Connecting to WebSocket: ${WS_URL}`);
-    this.socket = new WebSocket(WS_URL);
+
+    const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+    const url = `${WS_BASE}/api/v1/accidents/ws?token=${token}`;
+
+    console.log(`🔗 Connecting to WebSocket: ${url}`);
+    this.socket = new WebSocket(url);
 
     // ── Event Handlers ─────────────────────────────────────────────────────
 

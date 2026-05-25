@@ -1,8 +1,10 @@
 """
 FILE : backend/app/routes/ambulance_routes.py
+==================================================================
 REST + WebSocket endpoints for the ambulance dispatch lifecycle.
+==================================================================
 
-New endpoints added (root cause fixes):
+New endpoints added:
   GET  /ambulances/{id}/missed-alerts   → replay missed events on reconnect
   POST /ambulances/{id}/pickup          → patient picked up; find nearest hospital
   POST /ambulances/{id}/complete        → hospital reached; resolve accident
@@ -11,6 +13,7 @@ New endpoints added (root cause fixes):
   WS   /ambulances/ws/{id}             → persistent real-time channel
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -21,6 +24,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
+from app.routes.auth import decode_token, get_current_user_from_header
 from app.models.ambulance import AmbulanceStatus
 from app.schemas.ambulance import (
     AmbulanceCreate, AmbulanceLocationUpdate, AmbulanceStatusUpdate,
@@ -38,7 +42,11 @@ router = APIRouter(prefix="/ambulances", tags=["Ambulance Dispatch"])
 # ═══════════════════════════════════════
 
 @router.post("/register", response_model=AmbulanceResponse, status_code=201)
-async def register_ambulance(payload: AmbulanceCreate, db: AsyncSession = Depends(get_db)):
+async def register_ambulance(
+    payload: AmbulanceCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
+):
     try:
         return await svc.create_ambulance(db, payload)
     except Exception as exc:
@@ -52,8 +60,8 @@ async def list_ambulances(db: AsyncSession = Depends(get_db)):
 
 @router.get("/nearby", response_model=list[NearbyAmbulanceResponse])
 async def get_nearby(
-    lat: float       = Query(...),
-    lon: float       = Query(...),
+    lat: float       = Query(..., ge=-90, le=90),
+    lon: float       = Query(..., ge=-180, le=180),
     radius_km: float = Query(20.0),
     limit: int       = Query(5),
     db: AsyncSession = Depends(get_db),
@@ -97,6 +105,7 @@ async def update_location(
     ambulance_id: int,
     payload: AmbulanceLocationUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
 ):
     """
     GPS ping from ambulance device (called every ~5 seconds).
@@ -126,6 +135,7 @@ async def update_status(
     ambulance_id: int,
     payload: AmbulanceStatusUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
 ):
     unit = await svc.update_status(db, ambulance_id, payload.status)
     if not unit:
@@ -157,10 +167,11 @@ async def get_missed_alerts(
 # ═══════════════════════════════════════
 @router.post("/dispatch", response_model=DispatchResult)
 async def dispatch(
-    lat: float       = Query(...),
-    lon: float       = Query(...),
+    lat: float       = Query(..., ge=-90, le=90),
+    lon: float       = Query(..., ge=-180, le=180),
     accident_id: int = Query(None, description="Link dispatch to an accident record"),
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
 ):
     """
     Auto-dispatch nearest available ambulance.
@@ -199,7 +210,11 @@ async def dispatch(
 
 
 @router.post("/{ambulance_id}/accept")
-async def accept_dispatch(ambulance_id: int, db: AsyncSession = Depends(get_db)):
+async def accept_dispatch(
+    ambulance_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
+):
     unit = await svc.get_ambulance_by_id(db, ambulance_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Ambulance not found.")
@@ -220,6 +235,7 @@ async def patient_pickup(
     accident_lat: float = Query(..., description="Accident/pickup latitude"),
     accident_lon: float = Query(..., description="Accident/pickup longitude"),
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
 ):
     """
     Driver has picked up patient.
@@ -276,6 +292,7 @@ async def complete_dispatch(
     ambulance_id: int,
     accident_id: int = Query(None, description="Accident to mark resolved"),
     db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user_from_header),
 ):
     """
     Hospital reached. Marks:
@@ -315,7 +332,7 @@ async def complete_dispatch(
 # ═══════════════════════════════════════
 
 @router.websocket("/ws/{ambulance_id}")
-async def ambulance_websocket(websocket: WebSocket, ambulance_id: int):
+async def ambulance_websocket(websocket: WebSocket, ambulance_id: int, token: str = Query(...)):
     """
     Persistent WebSocket connection for one ambulance unit.
 
@@ -333,12 +350,26 @@ async def ambulance_websocket(websocket: WebSocket, ambulance_id: int):
     Messages pushed to client:
       DISPATCH_ALERT | HOSPITAL_ROUTE | DISPATCH_COMPLETED | LOCATION_UPDATE
     """
+    user_id = decode_token(token)
+    if user_id is None:
+        logger.warning("WS auth failed for ambulance %d (invalid or expired token)", ambulance_id)
+        await websocket.close(code=1008, reason="Invalid or expired token")
+        return
+
     await ambulance_ws_manager.connect(websocket, ambulance_id)
     logger.info("WS opened: ambulance %d", ambulance_id)
 
     try:
         while True:
-            data = await websocket.receive_json()
+            try:
+                data = await asyncio.wait_for(websocket.receive_json(), timeout=30.0)
+            except asyncio.TimeoutError:
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except Exception:
+                    break
+                continue
+
             msg_type = data.get("type")
 
             if msg_type == "ping":
@@ -347,16 +378,39 @@ async def ambulance_websocket(websocket: WebSocket, ambulance_id: int):
 
             elif msg_type == "location_update":
                 # Real-time location via WS (alternative to REST GPS ping)
+                lat = data.get("lat")
+                lon = data.get("lon")
                 logger.debug(
                     "WS location ambulance %d: %s, %s",
-                    ambulance_id, data.get("lat"), data.get("lon"),
+                    ambulance_id, lat, lon,
                 )
+
+                if lat is not None and lon is not None:
+                    # Validate coordinate ranges
+                    if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+                        await websocket.send_json({"type": "error", "detail": "Invalid coordinates"})
+                        continue
+
+                    # Persist to DB — create a fresh AsyncSession for this background operation
+                    from app.database.db import SessionLocal
+                    from app.schemas.ambulance import AmbulanceLocationUpdate
+
+                    try:
+                        async with SessionLocal() as _db:
+                            await svc.update_location(
+                                _db,
+                                ambulance_id,
+                                AmbulanceLocationUpdate(latitude=lat, longitude=lon),
+                            )
+                    except Exception as e:
+                        logger.error("WS location save failed for ambulance %d: %s", ambulance_id, e)
+
                 # Broadcast to operator dashboards
                 await ambulance_ws_manager.broadcast_all({
                     "type":         "LOCATION_UPDATE",
                     "ambulance_id": ambulance_id,
-                    "latitude":     data.get("lat"),
-                    "longitude":    data.get("lon"),
+                    "latitude":     lat,
+                    "longitude":    lon,
                     "timestamp":    datetime.now(timezone.utc).isoformat(),
                 })
 

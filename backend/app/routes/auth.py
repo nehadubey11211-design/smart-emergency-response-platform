@@ -5,32 +5,9 @@ Authentication Endpoints
 ======================================
 
 Implements JWT (JSON Web Token) based stateless authentication.
-
 WHY JWT?
   Traditional session-based auth stores session data on the server.
   JWT auth encodes the user's identity INTO the token itself.
-
-  Benefits:
-    - Stateless: no session storage needed on the server
-    - Scalable: any server in a cluster can verify any token
-    - Self-contained: the token carries user ID, expiry, etc.
-
-  Trade-offs:
-    - Tokens can't be invalidated before expiry (use short TTL + refresh tokens)
-    - Token size is larger than a session ID
-
-TOKEN LIFECYCLE:
-  1. Client POSTs email+password to /login
-  2. Server verifies password hash with bcrypt
-  3. Server creates a JWT signed with SECRET_KEY, containing user_id + expiry
-  4. Client stores the token (localStorage / memory)
-  5. Client sends token in header: Authorization: Bearer <token>
-  6. Server decodes and verifies the token on every protected request
-
-INTERVIEW TALKING POINT:
-  "I chose bcrypt for password hashing because it has a configurable cost factor.
-  As hardware gets faster, you can increase the cost to keep brute-force
-  attacks equally slow, without changing the API."
 """
 
 from datetime import datetime, timedelta, timezone
@@ -95,7 +72,10 @@ def decode_token(token: str) -> Optional[int]:
             settings.SECRET_KEY,
             algorithms=[settings.ALGORITHM],
         )
-        return int(payload["sub"])
+        sub = payload.get("sub")
+        if sub is None:
+            return None
+        return int(sub)
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:
@@ -129,6 +109,31 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_from_header(
+    authorization: str = Header(None),
+    db: AsyncSession = Depends(get_db),
+):
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization.split(" ", 1)[1]
+    return await get_current_user(token, db)
+
+
+async def get_admin_user(
+    user: User = Depends(get_current_user_from_header),
+):
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
+        )
+    return user
+
+
 @router.post(
     "/register",
     response_model=TokenResponse,
@@ -156,6 +161,11 @@ async def register(request: Request, user_data: UserCreate, db: AsyncSession = D
     await db.refresh(user)
 
     token = create_access_token(user.id)
+    # Update last login timestamp
+    user.last_login_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(user)
+
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 
@@ -170,7 +180,11 @@ async def login(request: Request, credentials: UserLogin, db: AsyncSession = Dep
     result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
-    if user is None or not verify_password(credentials.password, user.password):
+    dummy_hash = "$2b$12$dummyhashfortimingprevention00000000000000000000000000"
+    stored_hash = user.password if user else dummy_hash
+    password_valid = verify_password(credentials.password, stored_hash)
+
+    if not user or not password_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -181,6 +195,10 @@ async def login(request: Request, credentials: UserLogin, db: AsyncSession = Dep
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account has been deactivated. Contact an administrator.",
         )
+
+    user.last_login_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(user)
 
     token = create_access_token(user.id)
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))

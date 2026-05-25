@@ -1,26 +1,49 @@
-﻿"""
+"""
 FILE: backend/app/routes/analytics.py
 ============================================
 Analytics & Reporting Endpoints
 ============================================
 """
 
+import time
 from datetime import datetime, timedelta, timezone
+from functools import wraps
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select, extract
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
+from app.routes.auth import get_current_user_from_header
 from app.models.accident_model import Accident, accident_status
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user_from_header)])
+
+_cache: dict = {}
+
+
+def ttl_cache(seconds: int):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            cache_kwargs = {k: v for k, v in kwargs.items() if k != "db"}
+            key = f"{func.__name__}:{args}:{sorted(cache_kwargs.items())}"
+            if key in _cache:
+                result, expires = _cache[key]
+                if time.monotonic() < expires:
+                    return result
+            result = await func(*args, **kwargs)
+            _cache[key] = (result, time.monotonic() + seconds)
+            return result
+        return wrapper
+    return decorator
 
 
 @router.get(
     "/summary",
     summary="Dashboard summary statistics",
 )
+@ttl_cache(seconds=60)
 async def get_summary(db: AsyncSession = Depends(get_db)):
     today = datetime.now(tz=timezone.utc).date()
 
@@ -39,17 +62,17 @@ async def get_summary(db: AsyncSession = Depends(get_db)):
         )
     )
 
-    result = await db.execute(select(Accident).where(Accident.resolved_at.isnot(None)))
-    resolved_accidents = result.scalars().all()
-
-    avg_response_minutes = 0.0
-    if resolved_accidents:
-        times = [
-            (a.resolved_at - a.detected_at).total_seconds() / 60
-            for a in resolved_accidents
-            if a.resolved_at and a.detected_at
-        ]
-        avg_response_minutes = round(sum(times) / len(times), 1) if times else 0.0
+    # Compute average response time in the database to avoid loading rows into Python
+    avg_seconds_result = await db.execute(
+        select(
+            func.avg(
+                func.extract("epoch", Accident.resolved_at) -
+                func.extract("epoch", Accident.detected_at)
+            )
+        ).where(Accident.resolved_at.isnot(None))
+    )
+    avg_seconds = avg_seconds_result.scalar() or 0.0
+    avg_response_minutes = round(avg_seconds / 60, 1)
 
     return {
         "total_today": total_today,
@@ -79,10 +102,11 @@ async def severity_breakdown(db: AsyncSession = Depends(get_db)):
     "/trends",
     summary="Accident count per day (line chart data)",
 )
-async def get_trends(days: int = 7, db: AsyncSession = Depends(get_db)):
-    if days < 1 or days > 365:
-        days = 7
-
+@ttl_cache(seconds=300)
+async def get_trends(
+    days: int = Query(default=7, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+):
     start_date = datetime.now(tz=timezone.utc) - timedelta(days=days)
 
     result = await db.execute(
@@ -118,7 +142,10 @@ async def status_breakdown(db: AsyncSession = Depends(get_db)):
     "/hotspots",
     summary="Top locations by accident frequency",
 )
-async def get_hotspots(limit: int = 10, db: AsyncSession = Depends(get_db)):
+async def get_hotspots(
+    limit: int = Query(default=10, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(
             Accident.location,
