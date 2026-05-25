@@ -26,7 +26,7 @@ export function AmbulanceSocketProvider({
   // Original socket hook
   const socket = useAmbulanceSocket(ambulanceId);
 
-  // ✅ Global dispatch state
+  //  Global dispatch state
   const [pendingDispatch, setPendingDispatch] = useState(null);
   const [acceptedDispatch, setAcceptedDispatch] = useState(null);
 
@@ -39,17 +39,21 @@ export function AmbulanceSocketProvider({
     }
   }, []);
 
-  // ✅ Listen for new dispatch alerts
+  // Listen for new dispatch alerts
   useEffect(() => {
     if (!socket?.lastAlert) return;
 
     const data = socket.lastAlert;
 
-    console.log("📨 Incoming Alert:", data);
+    if (import.meta.env.DEV) {
+  console.log("📨 Incoming Alert:", data);
+}
 
     // ONLY set modal for dispatch alerts
     if (data.type === "DISPATCH_ALERT") {
-      console.log("🚑 Pending Dispatch Set");
+      if (import.meta.env.DEV) {
+  console.log("🚑 Pending Dispatch Set");
+}
 
       setPendingDispatch(data);
     }
@@ -60,7 +64,7 @@ export function AmbulanceSocketProvider({
       value={{
         ...socket,
 
-        // ✅ Added global dispatch state
+        //  Added global dispatch state
         pendingDispatch,
         setPendingDispatch,
         acceptedDispatch,

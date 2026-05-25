@@ -1,4 +1,4 @@
-/**
+﻿/**
  * FILE: frontend/src/pages/Login.jsx
  * =========================================
  * Login Page — Controlled Form with JWT Auth
@@ -223,7 +223,10 @@ export default function Login() {
     <div className={cx.root(dark)}>
       {/* Video background */}
       <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover z-0">
-        <source src="/backgrounds/emergency-background-video.mp4" type="video/mp4" />
+       <source
+      src="https://res.cloudinary.com/dcy4ufnnb/video/upload/v1779630245/emergency-background-video_turvld.mp4"
+      type="video/mp4"
+    />
         <div style={{ backgroundImage: 'url("/backgrounds/ai-emergency-background.png")', backgroundSize: "cover", backgroundPosition: "center", position: "absolute", inset: 0, width: "90%", height: "100%" }} />
       </video>
 
@@ -231,7 +234,7 @@ export default function Login() {
 
       {/* Logo */}
       <div className="absolute left-5 top-4 z-20">
-        <img src="/logo.png" alt="AI Smart Detection Logo" className="h-12 w-auto" />
+        <img src="https://res.cloudinary.com/dcy4ufnnb/image/upload/f_auto,q_auto/logo_exxyok" alt="AI Smart Detection Logo" className="h-12 w-auto" />
       </div>
 
       {/* Theme toggle */}
@@ -312,7 +315,7 @@ export default function Login() {
             <div className="mt-4">
               <p className="text-sm text-slate-300 mb-2">Register as</p>
               <div className="flex gap-3">
-                {[["user", "As User", "blue"], ["operator", "As Operator", "red"]].map(([role, label, color]) => (
+                {[["user", "As User", "blue"], ["operator", "As Operator", "red"]].map(([role, label]) => (
             <button
               key={role}
               type="button"

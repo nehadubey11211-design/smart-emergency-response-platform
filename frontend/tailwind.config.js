@@ -31,7 +31,28 @@ export default {
   // Tailwind scans these files to find used utility classes
   content: [
     "./index.html",
+    "./public/**/*.html",              // FIX: HTML templates inside public/ were not scanned
     "./src/**/*.{js,jsx,ts,tsx}",
+    "./config/**/*.{js,ts}",           // FIX: config objects with class strings were not scanned
+  ],
+
+  // Safelist protects dynamic classes built via string interpolation
+  // e.g. `bg-${color}-500` in Login.jsx — Tailwind can't statically detect these
+  safelist: [
+    // Brand status colours used dynamically (e.g. severity levels, incident states)
+    "bg-brand-red",
+    "bg-brand-orange",
+    "bg-brand-yellow",
+    "bg-brand-green",
+    "bg-brand-blue",
+    "text-brand-red",
+    "text-brand-orange",
+    "text-brand-yellow",
+    "text-brand-green",
+    "text-brand-blue",
+    // Pattern-based safelist for any bg-*-{400,500,600} constructed dynamically
+    { pattern: /^bg-(red|orange|yellow|green|blue)-(400|500|600)$/ },
+    { pattern: /^text-(red|orange|yellow|green|blue)-(400|500|600)$/ },
   ],
 
   theme: {
@@ -62,13 +83,19 @@ export default {
       animation: {
         "pulse-fast": "pulse 0.8s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "blink":      "blink 1.2s step-end infinite",
-        "ring":       "pulse-ring 1.5s ease-in-out infinite",
+        "ring":       "pulse-ring 1.5s ease-in-out infinite",  // FIX: keyframe added below
       },
 
       keyframes: {
         blink: {
           "0%, 100%": { opacity: "1" },
           "50%":      { opacity: "0" },
+        },
+       
+        "pulse-ring": {
+          "0%":   { transform: "scale(0.95)", opacity: "0.8" },
+          "70%":  { transform: "scale(1.1)",  opacity: "0" },
+          "100%": { transform: "scale(0.95)", opacity: "0" },
         },
       },
     },

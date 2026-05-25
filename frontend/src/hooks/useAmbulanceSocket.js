@@ -20,15 +20,30 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const WS_BASE          = import.meta.env.VITE_WS_URL  || "ws://localhost:8000";
+const protocol =
+  window.location.protocol === "https:"
+    ? "wss:"
+    : "ws:";
+
+const WS_BASE =
+  import.meta.env.VITE_WS_URL ||
+  `${protocol}//${window.location.host}`;
 const RECONNECT_DELAY  = 3_000;   // ms before reconnect attempt
 const PING_INTERVAL    = 25_000;  // ms between keep-alive pings
 const MAX_ALERT_HISTORY = 50;     // keep last N alerts in state
+// Stable alert type set (prevents unnecessary callback recreation)
+const ALERT_TYPES = new Set([
+  "DISPATCH_ALERT",
+  "NEARBY_ACCIDENT_ALERT",
+  "DISPATCH_ACCEPTED",
+  "DISPATCH_COMPLETED",
+]);
 
 export function useAmbulanceSocket(ambulanceId) {
   const wsRef        = useRef(null);
   const pingRef      = useRef(null);
   const reconnectRef = useRef(null);
+  const connectRef   = useRef(null);
 
   const [isConnected,      setIsConnected]      = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("disconnected");
@@ -37,23 +52,39 @@ export function useAmbulanceSocket(ambulanceId) {
 
   // ── Pure helpers ──────────────────────────────────────────────────────
 
-  const playAlertBeep = useCallback(() => {
-    try {
-      const ctx  = new (window.AudioContext || window.webkitAudioContext)();
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 880;
-      osc.type            = "square";
-      gain.gain.setValueAtTime(0.35, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.9);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.9);
-    } catch (_) {
-      // AudioContext may be blocked before user interaction — silently ignore
-    }
-  }, []);
+   const playAlertBeep = useCallback(() => {
+  try {
+    const ctx =
+      new (window.AudioContext || window.webkitAudioContext)();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.frequency.value = 880;
+    osc.type = "square";
+
+    gain.gain.setValueAtTime(0.35, ctx.currentTime);
+
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      ctx.currentTime + 0.9
+    );
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.9);
+
+    //  Cleanup AudioContext after sound ends
+    osc.onended = () => {
+      ctx.close();
+    };
+
+  } catch (_) {
+    // Audio may be blocked before user interaction
+  }
+}, []);
 
   const appendAlert = useCallback((data) => {
     const stamped = { ...data, receivedAt: new Date().toISOString() };
@@ -62,12 +93,9 @@ export function useAmbulanceSocket(ambulanceId) {
   }, []);
 
   // ── Message router ────────────────────────────────────────────────────
-  const ALERT_TYPES = [
-    "DISPATCH_ALERT", "NEARBY_ACCIDENT_ALERT",
-    "DISPATCH_ACCEPTED", "DISPATCH_COMPLETED",
-  ];
+
   const handleMessage = useCallback((data) => {
-    if (!ALERT_TYPES.includes(data.type)) return;
+    if (!ALERT_TYPES.has(data.type)) return;
     if (data.type === "DISPATCH_ALERT" && data.sound) {
       playAlertBeep();
        // Browser notification
@@ -118,15 +146,25 @@ export function useAmbulanceSocket(ambulanceId) {
       }
     };
 
-    ws.onclose = () => {
-      setIsConnected(false);
-      setConnectionStatus("disconnected");
-      clearInterval(pingRef.current);
-      reconnectRef.current = setTimeout(connect, RECONNECT_DELAY);
-      console.info(`[AmbulanceWS] Disconnected — reconnecting in ${RECONNECT_DELAY}ms`);
-    };
+   ws.onclose = () => {
 
+  setIsConnected(false);
+  setConnectionStatus("disconnected");
+
+  clearInterval(pingRef.current);
+
+  reconnectRef.current = setTimeout(() => {
+
+    connectRef.current?.();
+
+  }, RECONNECT_DELAY);
+
+  console.info(
+    `[AmbulanceWS] Disconnected — reconnecting in ${RECONNECT_DELAY}ms`
+  );
+};
     ws.onerror = () => setConnectionStatus("error");
+     
   }, [ambulanceId, handleMessage]);
 
   const sendMessage = useCallback((data) => {
@@ -134,6 +172,10 @@ export function useAmbulanceSocket(ambulanceId) {
       wsRef.current.send(JSON.stringify(data));
     }
   }, []);
+  // Always keep latest connect function reference
+useEffect(() => {
+  connectRef.current = connect;
+}, [connect]);
 
   useEffect(() => {
 

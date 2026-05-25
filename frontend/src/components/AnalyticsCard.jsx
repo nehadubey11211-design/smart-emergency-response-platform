@@ -20,6 +20,7 @@
  *   trend    {string}  — "up" | "down" | "flat" | undefined
  */
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import PropTypes from 'prop-types';
 
 export default function AnalyticsCard({
   title,
@@ -97,4 +98,15 @@ export default function AnalyticsCard({
       </div>
     </div>
   );
+  AnalyticsCard.propTypes = {
+  title: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([
+    PropTypes.string,
+    PropTypes.number
+  ]).isRequired,
+  subtitle: PropTypes.string,
+  color: PropTypes.string,
+  trend: PropTypes.string,
+  icon: PropTypes.elementType
+};
 }

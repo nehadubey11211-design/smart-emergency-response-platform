@@ -4,21 +4,32 @@
   /* Colors */
   --bg-dark: #0f172a;
   --bg-panel: #1e293b;
+
   --border: #334155;
+
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-dim: #64748b;
+
   --red: #ef4444;
   --blue: #3b82f6;
   --green: #10b981;
-  
+
+  /* Compatibility aliases */
+  --bg-primary: var(--bg-dark);
+  --bg-card: var(--bg-panel);
+
+  --border-primary: var(--border);
+
+  --text-muted: var(--text-secondary);
+
   /* Spacing */
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
   --space-md: 1rem;
   --space-lg: 1.5rem;
   --space-xl: 2rem;
-  
+
   /* Typography */
   --font-xs: 0.75rem;
   --font-sm: 0.875rem;

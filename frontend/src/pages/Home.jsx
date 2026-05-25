@@ -27,7 +27,6 @@
  *   handles all navigation by swapping components."
  */
 
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -72,13 +71,14 @@ function Navbar() {
   ];
 
   return (
-    <nav className="sticky top-0 z-50 bg-black/40 backdrop-blur-2xl border-b border-white/10 shadow-sm border-t border-white/100">
+  
+    <nav className="sticky top-0 z-50 bg-black/40 backdrop-blur-2xl border-b border-white/10 shadow-sm">
       <div className="max-w-8xl mx-auto px-8 sm:px-4 lg:px-4">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <div className="flex items-center space-x-2">
               <div className="w-11 h-11 bg-gradient-to-br from-white to-white-900 rounded-xl flex items-center justify-center shadow-lg shadow-white-500/30">
-                <img src="/logo.png" alt="USE Logo" className="w-10 h-10 object-contain" />
+                <img src="https://res.cloudinary.com/dcy4ufnnb/image/upload/f_auto,q_auto/logo_exxyok" alt="USE Logo" className="w-10 h-10 object-contain" />
               </div>
               <div>
                 <div className="text-xl font-bold text-white tracking-tight">Smart-Emergency-Response-Platform</div>
@@ -135,11 +135,20 @@ function Navbar() {
   );
 }
 
+const PARTICLE_POSITIONS = Array.from(
+  { length: 20 },
+  (_, i) => ({
+    top: `${(i * 17 + 7) % 100}%`,
+    left: `${(i * 23 + 11) % 100}%`,
+    duration: `${2 + (i % 5)}s`,
+  })
+);
+
 function HeroSection() {
   const navigate = useNavigate();
 
   return (
-    <section className="relative min-h-[89vh] flex items-center overflow-hidden bg-black pt-2" style={{ backgroundImage: 'url(/back.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+    <section className="relative min-h-[89vh] flex items-center overflow-hidden bg-black pt-2" style={{ backgroundImage: 'url(https://res.cloudinary.com/dcy4ufnnb/image/upload/v1779629849/back_bpnkbx.png)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
       <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/10 to-transparent"></div>
 
       <div className="relative max-w-5xl mx-9 px-6 sm:px-4 lg:px-4 pt-0.5">
@@ -182,14 +191,14 @@ function HeroSection() {
       </div>
 
       <div className="absolute inset-0 pointer-events-none">
-        {[...Array(20)].map((_, i) => (
+        {PARTICLE_POSITIONS.map((pos, i) => (
           <div
             key={i}
             className="absolute w-2 h-2 bg-cyan-400 rounded-full opacity-30 animate-ping"
             style={{
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
-              animationDuration: `${2 + Math.random() * 5}s`,
+              top: pos.top,
+              left: pos.left,
+              animationDuration: pos.duration,
             }}
           />
         ))}
@@ -594,15 +603,29 @@ function ProcessSection() {
           viewport={{ once: true }}
           className="mt-28"
         >
-          
         </motion.div>
       </div>
     </section>
   );
 }
 
+
 function ContactSection() {
-  const navigate = useNavigate();
+ 
+  const [formData, setFormData] = useState({ name: "", email: "", message: "" });
+  const [submitted, setSubmitted] = useState(false);
+
+ 
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+ 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log("Form submitted:", formData); 
+    setSubmitted(true);
+  };
 
   return (
     <section id="contact" className="relative py-12 bg-[#020617] overflow-hidden">
@@ -639,6 +662,7 @@ function ContactSection() {
         </motion.div>
 
         <div className="grid lg:grid-cols-2 gap-10">
+         
           <motion.div
             initial={{ opacity: 0, x: -60 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -664,9 +688,9 @@ function ContactSection() {
                   <Mail className="text-white" size={28} />
                 </div>
                 <div>
-                  <h4 className="text-xl font-semibold text-white"> Mail</h4>
-                  <p className="text-gray-400 mt-2">Connect directly with  administrators.</p>
-                  <div className="text-green-400 mt-3 text-lg font-semibod">smartalert@gmail.com</div>
+                  <h4 className="text-xl font-semibold text-white">Mail</h4>
+                  <p className="text-gray-400 mt-2">Connect directly with administrators.</p>
+                  <div className="text-green-400 mt-3 text-lg font-semibold">smartalert@gmail.com</div>
                 </div>
               </div>
               <div className="flex items-start gap-5">
@@ -694,6 +718,7 @@ function ContactSection() {
             </div>
           </motion.div>
 
+          
           <motion.div
             initial={{ opacity: 0, x: 60 }}
             whileInView={{ opacity: 1, x: 0 }}
@@ -703,23 +728,64 @@ function ContactSection() {
           >
             <div className="absolute bottom-0 left-0 w-[250px] h-[250px] bg-blue-500/10 blur-[100px]" />
             <h3 className="text-3xl font-bold text-white mb-10">Send Request</h3>
-            <div className="space-y-6">
+
+            
+            <form onSubmit={handleSubmit} className="space-y-6">
+
+             
               <div>
                 <label className="text-gray-300 text-sm mb-3 block">Full Name</label>
-                <input type="text" placeholder="Enter your name" className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder:text-gray-500 outline-none focus:border-cyan-400/40 transition-all duration-300" />
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  placeholder="Enter your name"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder:text-gray-500 outline-none focus:border-cyan-400/40 transition-all duration-300"
+                />
               </div>
+
+              {/* Email input — name/value/onChange add केले */}
               <div>
                 <label className="text-gray-300 text-sm mb-3 block">Email Address</label>
-                <input type="email" placeholder="Enter your email" className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder:text-gray-500 outline-none focus:border-cyan-400/40 transition-all duration-300" />
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  placeholder="Enter your email"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder:text-gray-500 outline-none focus:border-cyan-400/40 transition-all duration-300"
+                />
               </div>
+
+             
               <div>
                 <label className="text-gray-300 text-sm mb-3 block">Message</label>
-                <textarea rows="5" placeholder="Type your message..." className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder:text-gray-500 outline-none resize-none focus:border-cyan-400/40 transition-all duration-300" />
+                <textarea
+                  name="message"
+                  value={formData.message}
+                  onChange={handleChange}
+                  rows="5"
+                  placeholder="Type your message..."
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white placeholder:text-gray-500 outline-none resize-none focus:border-cyan-400/40 transition-all duration-300"
+                />
               </div>
-              <button onClick={() => navigate("/login")} className="w-full py-5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-lg font-semibold hover:scale-[1.02] transition-all duration-300 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
+
+              
+              <button
+                type="submit"
+                className="w-full py-5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-lg font-semibold hover:scale-[1.02] transition-all duration-300 shadow-[0_0_40px_rgba(34,211,238,0.25)]"
+              >
                 Send
               </button>
-            </div>
+
+              {submitted && (
+                <p className="text-green-400 text-center font-semibold mt-2">
+                  Message sent successfully!  
+                </p>
+              )}
+
+            </form>
           </motion.div>
         </div>
       </div>
@@ -735,7 +801,7 @@ function Footer() {
           <div>
             <div className="flex items-center space-x-3 mb-5">
               <div className="w-80 h-90 bg-gray-100 rounded-lg flex items-center justify-center">
-                <img src="/logo.png" alt="USE Logo" className="w-18 h-18 object-contain" />
+                <img src="https://res.cloudinary.com/dcy4ufnnb/image/upload/f_auto,q_auto/logo_exxyok" alt="USE Logo" className="w-18 h-18 object-contain" />
               </div>
               <div>
                 <div className="text-sm font-bold text-white">Smart-Emergency-Response-Platform</div>

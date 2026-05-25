@@ -52,6 +52,8 @@ import History    from "./pages/History.jsx";
 import AmbulanceDashboard from "./pages/AmbulanceDashboard"; 
 import { AmbulanceSocketProvider } from "./context/AmbulanceSocketContext.jsx";
 import GlobalDispatchModal from "./components/GlobalDispatchModal";
+import { GlobalDispatchProvider } from "./context/GlobalDispatchContext.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 // ─── Auth Guard Component ─────────────────────────────────────────────────────
 
 /**
@@ -64,19 +66,41 @@ import GlobalDispatchModal from "./components/GlobalDispatchModal";
  *
  * @param {{ children: React.ReactNode }} props
  */
+  function isTokenValid(token) {
+  try {
+    const parts = token.split(".");
+
+    // JWT must have 3 parts
+    if (parts.length !== 3) {
+      return false;
+    }
+
+    // Decode payload
+    const payload = JSON.parse(atob(parts[1]));
+
+    // exp claim must exist
+    if (!payload.exp) {
+      return false;
+    }
+
+    // Check token expiry
+    return payload.exp * 1000 > Date.now();
+
+  } catch {
+    // Invalid token format
+    return false;
+  }
+}
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem("token") ||
   sessionStorage.getItem("token")
 
-  if (!token) {
-    /**
-     * <Navigate replace> replaces the current history entry instead of
-     * adding to it. This means pressing the browser Back button after
-     * login won't send the user back to the "you must log in" redirect.
-     */
-    return <Navigate to="/login" replace />;
-  }
+ if (!token || !isTokenValid(token)) {
+  localStorage.removeItem("token");
+  sessionStorage.removeItem("token");
 
+  return <Navigate to="/login" replace />;
+}
   return (
     // Layout wrapper: fixed sidebar + scrollable main content
     <div className="flex min-h-screen" style={{ background: "var(--bg-dark)" }}>
@@ -95,17 +119,26 @@ function ProtectedRoute({ children }) {
 // ─── Root App Component ───────────────────────────────────────────────────────
 
 export default function App() {
-  const storedAmbulanceId = Number(localStorage.getItem("ambulance_id")) || 1;
+  const storedAmbulanceId = 
+  Number(localStorage.getItem("ambulance_id")) || 1;
 
   return (
-    /**
+     <BrowserRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
+        
+    {/*
      * BrowserRouter provides the routing context to all descendant components.
      * Everything that uses useNavigate(), useParams(), Link, etc. must be
      * inside a Router.
-     */
-    <AmbulanceSocketProvider ambulanceId={storedAmbulanceId}>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <GlobalDispatchModal />
+     */}
+    <GlobalDispatchProvider>
+      <GlobalDispatchModal /> {/* Global modal for dispatching ambulances, accessible from any page */}
+    
+      
         <Routes>
 
         {/* ── Public Routes (no auth required) ──────────────────────────── */}
@@ -114,47 +147,58 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* ── Protected Routes (redirect to /login if not authenticated) ── */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
+       <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <ErrorBoundary>
               <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/analytics"
+            </ErrorBoundary>
+          </ProtectedRoute>
+        }
+      />
+        <Route path="/analytics"
           element={
             <ProtectedRoute>
-              <Analytics />
+              <ErrorBoundary>
+                <Analytics />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
-        <Route
+       <Route
           path="/history"
           element={
             <ProtectedRoute>
-              <History />
+              <ErrorBoundary>
+                <History />
+              </ErrorBoundary>
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/ambulance/:ambulanceId"
           element={
-            <ProtectedRoute>
-              <AmbulanceDashboard />
-            </ProtectedRoute>
+            <AmbulanceSocketProvider
+              ambulanceId={storedAmbulanceId}
+            >
+             <ProtectedRoute>
+                <ErrorBoundary>
+                  <AmbulanceDashboard />
+                </ErrorBoundary>
+              </ProtectedRoute>
+            </AmbulanceSocketProvider>
           }
         />
 
         {/* ── 404 Fallback ──────────────────────────────────────────────── */}
         {/* Any unknown URL redirects to the home page */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*"
+         element={<Navigate to="/" replace />} />
         
       </Routes>
-      
+      </GlobalDispatchProvider>
     </BrowserRouter>
-    </AmbulanceSocketProvider>
+    
   );
 }
