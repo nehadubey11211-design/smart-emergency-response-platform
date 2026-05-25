@@ -52,7 +52,7 @@ export default function StatusPanel() {
 
     const checkApiHealth = async () => {
   try {
-    const response = await fetch("/api/health");
+    const response = await fetch("v1/health");
 
     if (response.ok) {
       setApiHealthy(true);
