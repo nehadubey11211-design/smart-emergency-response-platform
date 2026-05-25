@@ -13,8 +13,11 @@
 
 import { useState } from "react";
 
-import { useGlobalAmbulanceSocket }
-from "../context/AmbulanceSocketContext";
+//import { useGlobalAmbulanceSocket }
+//from "../context/AmbulanceSocketContext";
+import {
+  useGlobalDispatch
+} from "../context/GlobalDispatchContext";
 
 import { DispatchModal }
 from "./ambulance/DispatchModal";
@@ -24,8 +27,13 @@ from "../services/ambulanceApi";
 
 export default function GlobalDispatchModal() {
 
-  const { pendingDispatch, setPendingDispatch, setAcceptedDispatch } =
-    useGlobalAmbulanceSocket();
+  //const { pendingDispatch, setPendingDispatch, setAcceptedDispatch } =
+    //useGlobalAmbulanceSocket();
+ const {
+  dispatchData: pendingDispatch,
+  closeDispatchModal,
+  openDispatchModal,
+} = useGlobalDispatch();
 
   const [loading, setLoading] = useState(false);
 
@@ -47,8 +55,7 @@ export default function GlobalDispatchModal() {
         "_blank"
       );
 
-      setAcceptedDispatch(pendingDispatch);
-      setPendingDispatch(null);
+      closeDispatchModal();
     } catch (e) {
       console.error("Accept dispatch failed:", e);
     } finally {
@@ -57,7 +64,7 @@ export default function GlobalDispatchModal() {
   };
 
   const handleReject = () => {
-    setPendingDispatch(null);
+    closeDispatchModal();
   };
 
   return (

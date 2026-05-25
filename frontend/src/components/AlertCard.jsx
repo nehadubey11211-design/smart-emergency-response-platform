@@ -36,9 +36,23 @@
 
 import { useState } from "react";
 import { MapPin, Clock, Camera, CheckCircle, Loader2, Zap } from "lucide-react";
+import PropTypes from 'prop-types';
 
 import { updateAccident, createGreenCorridor } from "../services/api";
 import { SEVERITY_COLOR, SEVERITY_BG, timeAgo, padId, pct } from "../utils/helpers";
+/**
+ * @typedef {Object} Accident
+ * @property {number} id
+ * @property {string} location
+ * @property {string} severity
+ * @property {string} status
+ */
+/**
+ * @param {{
+ *  accident: Accident,
+ *  onUpdate: Function
+ * }} props
+ */
 
 /**
  * @param {object}   props.accident  - Accident object from the API
@@ -239,4 +253,14 @@ export default function AlertCard({ accident, onUpdate }) {
       </div>
     </article>
   );
+  AlertCard.propTypes = {
+  accident: PropTypes.shape({
+    id: PropTypes.number.isRequired,
+    location: PropTypes.string.isRequired,
+    severity: PropTypes.string,
+    status: PropTypes.string
+  }).isRequired,
+
+  onUpdate: PropTypes.func
+};
 }

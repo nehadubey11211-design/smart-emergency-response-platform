@@ -28,6 +28,7 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import PropTypes from 'prop-types';
 
 /**
  * Standardized Button Component
@@ -58,7 +59,8 @@ export default function Button({
   ...props
 }) {
   // Build CSS classes using design system
-  const baseClasses = 'btn-base';
+  const baseClasses = 'btn-base relative flex items-center justify-center gap-2';
+  const flexClasses = 'flex items-center justify-center gap-2';
   
   // Variant classes
   const variantClasses = {
@@ -106,11 +108,14 @@ export default function Button({
       {...props}
     >
       {loading && (
-        <Loader2 
-          size={size === 'sm' ? 14 : size === 'lg' ? 20 : 16}
-          className="animate-spin"
-          aria-hidden="true"
-        />
+          <span className="absolute inset-0 flex items-center justify-center">
+    <Loader2
+      size={size === 'sm' ? 14 : size === 'lg' ? 20 : 16}
+      className="animate-spin"
+      aria-hidden="true"
+    />
+  </span>
+        
       )}
       
       {!loading && icon && (
@@ -122,8 +127,8 @@ export default function Button({
         </span>
       )}
       
-      <span className={loading ? 'opacity-0' : 'opacity-100'}>
-        {children}
+     <span className={loading ? 'invisible flex items-center' : 'flex items-center'}>
+      {children}
       </span>
     </button>
   );
@@ -217,6 +222,30 @@ export function IconButton({
       )}
     </button>
   );
+  Button.propTypes = {
+  variant: PropTypes.oneOf([
+    'primary',
+    'secondary',
+    'danger',
+    'success',
+    'ghost'
+  ]),
+
+  size: PropTypes.oneOf([
+    'sm',
+    'md',
+    'lg'
+  ]),
+
+  loading: PropTypes.bool,
+  disabled: PropTypes.bool,
+  fullWidth: PropTypes.bool,
+  children: PropTypes.node,
+  onClick: PropTypes.func,
+  className: PropTypes.string,
+  icon: PropTypes.node,
+  type: PropTypes.string
+};
 }
 
 

@@ -3,23 +3,24 @@
  * -----------------------------
  * Main driver-facing dashboard page.
  * Features:
- *   ✅ Stadia Alidade Smooth Dark tiles — matches Google Maps dark navy theme
- *   ✅ Real-time WebSocket dispatch alerts with sound
- *   ✅ Dispatch banner with Accept / Reject buttons (wired up correctly)
- *   ✅ Live ambulance 🚑 + accident 📍 on map
- *   ✅ Hospital markers (named only, debounced, cleared on reject/complete)
- *   ✅ Triple-layer route line (shadow + blue + dashed highlight)
- *   ✅ GPS tracking → backend every tick
- *   ✅ Status badge + Go Offline toggle
- *   ✅ Complete Job button
- *   ✅ Route overview panel with hospital count
- *   ✅ Alert history feed
+ *  Stadia Alidade Smooth Dark tiles — matches Google Maps dark navy theme
+ *   Real-time WebSocket dispatch alerts with sound
+ *    Dispatch banner with Accept / Reject buttons (wired up correctly)
+ *    Live ambulance + accident  on map
+ *   Hospital markers (named only, debounced, cleared on reject/complete)
+ *    Triple-layer route line (shadow + blue + dashed highlight)
+ *    GPS tracking → backend every tick
+ *    Status badge + Go Offline toggle
+ *    Complete Job button
+ *    Route overview panel with hospital count
+ *    Alert history feed
  *
  * Route: /ambulance/:ambulanceId
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import debounce from "lodash.debounce";
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -37,6 +38,7 @@ import { useGlobalAmbulanceSocket } from "../context/AmbulanceSocketContext.jsx"
 import { ambulanceApi }             from "../services/ambulanceApi";
 import { getSignals }               from "../services/api";
 import { AmbulanceAlertCard }       from "../components/ambulance/AmbulanceAlertCard";
+
 
 delete L.Icon.Default.prototype._getIconUrl;
 
@@ -90,7 +92,6 @@ const hospitalIcon = L.divIcon({
 });
 
 // ── Map fly-to helper ─────────────────────────────────────────────────────────
-//        map.flyTo() to fire continuously. Now guards with lat/lon comparison.
 function MapFlyTo({ center }) {
   const map     = useMap();
   const prevRef = useRef(null);
@@ -146,7 +147,6 @@ const STATUS = {
   offline:   { label: "OFFLINE",     dot: "#6b7280", border: "#374151", bg: "rgba(107,114,128,0.10)" },
 };
 
-
 const HOSPITAL_REFETCH_M = 200;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -174,8 +174,23 @@ export default function AmbulanceDashboard() {
   const [mapCenter,      setMapCenter]      = useState([18.5204, 73.8567]);
   const [hospitals,      setHospitals]      = useState([]);
 
-  const locationWatchRef     = useRef(null);
+  
   const lastHospitalFetchRef = useRef(null);
+
+
+
+
+  const updateLocationDebounced = useCallback(
+
+  debounce((lat, lon) => {
+
+    ambulanceApi
+      .updateLocation(id, lat, lon)
+      .catch(() => {});
+
+  }, 10_000),
+
+[id]);
 
   // ── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -201,24 +216,38 @@ export default function AmbulanceDashboard() {
     setMapCenter([acceptedDispatch.accident_lat, acceptedDispatch.accident_lon]);
   }, [acceptedDispatch]);
 
-  
+  // ── Fetch nearby hospitals from Overpass API ──────────────────────────────
   const fetchHospitals = useCallback(async (lat, lon) => {
     // Only re-fetch if moved more than HOSPITAL_REFETCH_M metres
     const last = lastHospitalFetchRef.current;
     if (last && haversineDistance([last.lat, last.lon], [lat, lon]) < HOSPITAL_REFETCH_M) return;
     lastHospitalFetchRef.current = { lat, lon };
 
-    
     const query = `
-      [out:json][timeout:15];
+      [out:json][timeout:25];
       (
         node["amenity"="hospital"]["name"](around:3000,${lat},${lon});
         way["amenity"="hospital"]["name"](around:3000,${lat},${lon});
       );
       out center body;
     `;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+
     try {
-      const res  = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: query });
+    
+      const res = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        body:   query,
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+    
+      if (!res.ok) {
+        throw new Error(`Overpass error: ${res.status}`);
+      }
+
       const data = await res.json();
       setHospitals(
         (data.elements || [])
@@ -226,7 +255,12 @@ export default function AmbulanceDashboard() {
           .filter((el) => el.lat && el.lon)
       );
     } catch (err) {
-      console.warn("Overpass fetch failed:", err);
+      clearTimeout(timer);
+      if (err.name === "AbortError") {
+        console.warn("Overpass timeout — skipping hospitals");
+      } else {
+        console.warn("Overpass fetch failed:", err.message);
+      }
     }
   }, []);
 
@@ -289,8 +323,8 @@ export default function AmbulanceDashboard() {
       if (!from?.lat || !to?.lat) { setRoutePath([]); return; }
       setRouteLoading(true);
       const path = await fetchRouteGeometry(from, to);
-      if (active) setRoutePath(path);
-      setRouteLoading(false);
+      if (active) {setRoutePath(path);
+      setRouteLoading(false)};
     };
     build();
     return () => { active = false; };
@@ -298,17 +332,39 @@ export default function AmbulanceDashboard() {
 
   // ── GPS tracking ──────────────────────────────────────────────────────────
   useEffect(() => {
+
     if (!navigator.geolocation) return;
-    locationWatchRef.current = navigator.geolocation.watchPosition(
+
+    const watchId = navigator.geolocation.watchPosition(
+
       ({ coords }) => {
-        setMyPosition([coords.latitude, coords.longitude]);
-        ambulanceApi.updateLocation(id, coords.latitude, coords.longitude).catch(() => {});
+
+        setMyPosition([
+          coords.latitude,
+          coords.longitude
+        ]);
+
+        updateLocationDebounced(
+          coords.latitude,
+          coords.longitude
+        );
       },
-      (err) => console.warn("GPS unavailable:", err),
-      { enableHighAccuracy: true, maximumAge: 15_000 },
+
+      (err) =>
+        console.warn("GPS unavailable:", err),
+
+      {
+        enableHighAccuracy: true,
+        maximumAge: 15_000,
+      }
     );
-    return () => navigator.geolocation.clearWatch(locationWatchRef.current);
-  }, [id]);
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      updateLocationDebounced.cancel();
+    };
+
+  }, [updateLocationDebounced]);
 
   // ── Accept dispatch ───────────────────────────────────────────────────────
   const handleAccept = useCallback(async () => {
@@ -325,14 +381,13 @@ export default function AmbulanceDashboard() {
     finally { setActionLoading(false); }
   }, [id, pendingDispatch, setAcceptedDispatch, setPendingDispatch]);
 
- 
   const handleReject = useCallback(() => {
     setPendingDispatch(null);
     setAcceptedDispatch(null);
     setAccidentPos(null);
     setRoutePath([]);
     setHospitals([]);
-    lastHospitalFetchRef.current = null; // allow fresh fetch on next dispatch
+    lastHospitalFetchRef.current = null;
   }, [setAcceptedDispatch, setPendingDispatch]);
 
   // ── Complete job ──────────────────────────────────────────────────────────
@@ -368,7 +423,6 @@ export default function AmbulanceDashboard() {
     </div>
   );
 
- 
   const signalCounts = trafficSignals.reduce(
     (acc, sig) => { acc[sig.current_mode] = (acc[sig.current_mode] || 0) + 1; return acc; }, {}
   );
@@ -414,7 +468,6 @@ export default function AmbulanceDashboard() {
         </div>
       </header>
 
-      
       {pendingDispatch && (
         <div style={styles.dispatchBanner}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -441,14 +494,12 @@ export default function AmbulanceDashboard() {
       <div style={styles.body}>
 
         {/* ── Map ── */}
-       
         <div style={styles.mapWrap}>
           <MapContainer
             center={mapCenter} zoom={13}
             style={{ height: "100%", width: "100%", borderRadius: 12 }}
             scrollWheelZoom doubleClickZoom touchZoom dragging zoomControl
           >
-         
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               attribution='© <a href="https://openstreetmap.org">OpenStreetMap</a>'
@@ -468,7 +519,6 @@ export default function AmbulanceDashboard() {
                   <Popup>🚨 Accident — {acceptedDispatch.severity}</Popup>
                 </Marker>
 
-                {/* Triple-layer route line */}
                 {routePath.length > 0 ? (
                   <>
                     <Polyline positions={routePath} pathOptions={{ color: "rgba(0,0,0,0.55)", weight: 16, opacity: 0.5 }} />
@@ -496,7 +546,6 @@ export default function AmbulanceDashboard() {
               </>
             )}
 
-            {/* Hospital markers — named hospitals only, ≤3km radius */}
             {hospitals.map((h) => (
               <Marker key={h.id} position={[h.lat, h.lon]} icon={hospitalIcon}>
                 <Popup>
@@ -517,7 +566,6 @@ export default function AmbulanceDashboard() {
 
           </MapContainer>
 
-          {/* Route overview overlay */}
           {acceptedDispatch && (
             <div style={styles.routeOverlay}>
               <strong style={{ display: "block", marginBottom: 10, fontSize: 12 }}>Route overview</strong>
@@ -547,7 +595,15 @@ export default function AmbulanceDashboard() {
                 <p>Monitoring for emergencies…</p>
               </div>
             ) : (
-              alerts.map((a, i) => <AmbulanceAlertCard key={i} alert={a} isLatest={i === 0} />)
+           
+              // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+              alerts.map((a) => (
+                <AmbulanceAlertCard
+                  key={`${a.type}-${a.receivedAt}`}
+                  alert={a}
+                  isLatest={a === alerts[0]}
+                />
+              ))
             )}
           </div>
         </aside>
@@ -567,7 +623,6 @@ function OverlayRow({ label, value, color = "rgba(255,255,255,0.6)" }) {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-//        variable in the signalCounts reduce() call above
 const styles = {
   root: {
     minHeight: "100vh", background: "#0b0f1e", color: "#e2e8f0",
@@ -638,8 +693,6 @@ const styles = {
     flex: 1, display: "grid", gridTemplateColumns: "1fr 320px", overflow: "hidden",
   },
 
- 
-  //        position:absolute, which requires a positioned ancestor to work
   mapWrap: {
     padding: 14, position: "relative", minHeight: "calc(100vh - 68px)",
   },

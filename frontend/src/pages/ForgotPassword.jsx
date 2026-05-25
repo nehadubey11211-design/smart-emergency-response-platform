@@ -105,22 +105,31 @@ export default function ForgotPassword() {
   // Toggle dark mode
   const toggleDark = useCallback(() => setDark((d) => !d), []);
   
-  // OTP timer effect
-useEffect(() => {
-  if (otpTimer > 0) {
-    otpTimerRef.current = setTimeout(() => {
-      setOtpTimer((prev) => prev - 1);
-    }, 1000);
-  } else {
-    setResendDisabled(false);
-  }
+  // OTP timer using setInterval
+const timerRef = useRef(null);
 
-  return () => {
-    if (otpTimerRef.current) {
-      clearTimeout(otpTimerRef.current);
-    }
-  };
-}, [otpTimer]);
+const startTimer = useCallback((seconds) => {
+  setOtpTimer(seconds);
+  setResendDisabled(true);
+
+  clearInterval(timerRef.current);
+
+  timerRef.current = setInterval(() => {
+    setOtpTimer((prev) => {
+      if (prev <= 1) {
+        clearInterval(timerRef.current);
+        setResendDisabled(false);
+        return 0;
+      }
+
+      return prev - 1;
+    });
+  }, 1000);
+}, []);
+
+useEffect(() => {
+  return () => clearInterval(timerRef.current);
+}, []);
 
 // Resend cooldown effect
 useEffect(() => {
@@ -174,8 +183,7 @@ useEffect(() => {
       setSuccess("OTP sent successfully! Please check your " + (isEmail ? "email" : "SMS"));
       setStep(2);
       setSubmitted(false);
-      setOtpTimer(300); // 5 minutes
-      setResendDisabled(true);
+      startTimer(300); // 5 minutes
       setResendCooldown(30);
     } catch (err) {
       setError(err?.response?.data?.detail || err?.message || "Failed to send OTP");
@@ -291,10 +299,8 @@ useEffect(() => {
       await sendResetOtp(payload);
       
      setSuccess("OTP resent successfully!");
-      setOtpTimer(300);
-      setResendDisabled(true);
+      startTimer(300);
       setResendCooldown(30);
-
     
       
       
@@ -320,16 +326,16 @@ useEffect(() => {
       playsInline
       className="absolute inset-0 w-full h-full object-cover z-0"
     >
-      <source
-        src="/backgrounds/emergency-background-video.mp4"
-        type="video/mp4"
-      />
+       <source
+      src="https://res.cloudinary.com/dcy4ufnnb/video/upload/v1779630245/emergency-background-video_turvld.mp4"
+      type="video/mp4"
+    />
 
       {/* Fallback Background Image */}
       <div
         style={{
           backgroundImage:
-            'url("/backgrounds/ai-emergency-background.png")',
+            'url("https://res.cloudinary.com/dcy4ufnnb/image/upload/v1779630245/ai-emergency-background.png")',
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",

@@ -49,6 +49,11 @@ import TrafficPanel  from "../components/TrafficPanel.jsx";
 import StatusPanel   from "../components/StatusPanel.jsx";
 import AnalyticsCard from "../components/AnalyticsCard.jsx";
 
+/**
+ * Operations dashboard page
+ * @returns {JSX.Element}
+ */
+
 // ─── Static data (defined outside — never recreated on render) ────────────────
 
 const FILTER_OPTIONS = ["active", "all"];
@@ -68,12 +73,17 @@ export default function Dashboard() {
   const [newAlert, setNewAlert] = useState(false);
 
   // ── Summary fetch: only re-run when accidents reference changes ───────────
-  useEffect(() => {
-    getSummary()
-      .then((res) => setSummary(res.data))
-      .catch((err) => console.error("Summary fetch failed:", err));
-  }, [accidents]);
-
+const fetchSummary = useCallback(async () => {
+  try {
+    const res = await getSummary();
+    setSummary(res.data);
+  } catch (err) {
+    console.error("Summary fetch failed:", err);
+  }
+}, []);
+useEffect(() => {
+  fetchSummary();
+}, [fetchSummary]);
   // ── WebSocket subscription ────────────────────────────────────────────────
   useEffect(() => {
     const handleNewAccident = () => {
@@ -95,6 +105,11 @@ export default function Dashboard() {
   // ── Stable filter setter (avoids recreating on every render) ─────────────
   const handleFilterChange = useCallback((f) => setFilter(f), []);
 
+  const handleRefetch = useCallback(() => {
+  refetch();
+  fetchSummary();
+}, [refetch, fetchSummary]);
+
   // ── KPI values: O(1) lookup per card instead of ad-hoc property access ───
   const kpiValues = useMemo(() => {
     if (!summary) return null;
@@ -108,6 +123,30 @@ export default function Dashboard() {
         : undefined,
     }));
   }, [summary]);
+  if (loading) return (
+  <div className="page-enter max-w-7xl mx-auto p-6">
+    
+    {/* KPI Skeleton Cards */}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {[...Array(4)].map((_, i) => (
+        <div
+          key={i}
+          className="loading-skeleton h-24 rounded-2xl border border-white/10"
+        />
+      ))}
+    </div>
+
+    {/* Incident Feed Skeleton */}
+    <div className="space-y-3">
+      {[...Array(6)].map((_, i) => (
+        <div
+          key={i}
+          className="loading-skeleton h-20 rounded-2xl border border-white/10"
+        />
+      ))}
+    </div>
+  </div>
+);
 
   return (
     <div className="page-enter max-w-7xl mx-auto relative border border-white/10 rounded-3xl p-6 bg-white/[0.02] backdrop-blur-xl shadow-[0_0_40px_rgba(59,130,246,0.08)] overflow-hidden">
@@ -187,12 +226,14 @@ export default function Dashboard() {
                 {filter === "active" ? "No active incidents. System clear. ✅" : "No incidents found."}
               </p>
             </div>
-          ) : (
+          )
+           : (
             <div className="flex flex-col gap-3">
               {filteredAccidents.map((accident) => (
                 <div key={accident.id}
                   className="border border-white/10 rounded-2xl bg-white/[0.03] backdrop-blur-lg p-2 hover:border-blue-400/30 transition-all duration-300">
-                  <AlertCard accident={accident} onUpdate={refetch} />
+                  <AlertCard accident={accident}onUpdate={handleRefetch}
+                  />
                 </div>
               ))}
             </div>

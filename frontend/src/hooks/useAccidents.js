@@ -37,11 +37,27 @@ import { getAccidents } from "../services/api";
 
 /**
  * Fetches and auto-refreshes the accidents list.
+ * /**
+ * @typedef {Object} Accident
+ * @property {number} id
+ * @property {string} location
+ * @property {string} severity
+ * @property {string} status
+ 
  *
  * @param {object} params          - Query params: { status, skip, limit }
  * @param {number} refreshInterval - Auto-refresh in ms. 0 = disabled.
  * @returns {{ data, loading, error, refetch }}
  *
+ * @param {Object} params
+ * @param {number} pollInterval
+ * @returns {{
+ *  data: Accident[],
+ *  loading: boolean,
+ *  error: Error | null,
+ *  refetch: Function
+ * }}
+ 
  * Example:
  *   const { data: accidents, loading, refetch } = useAccidents({ status: "detected" }, 15000);
  */

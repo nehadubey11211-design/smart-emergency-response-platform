@@ -18,9 +18,11 @@
  */
 
 /* ─── Import Design System ────────────────────────────────────────────────── */
-@import './styles/design-tokens.css';
+@import '../styles/design-tokens.css';
 @import './styles/components.css';
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap');
 
+/* ── Root ── */
 /* ─── Tailwind Directives ─────────────────────────────────────────────────── */
 @tailwind base;
 @tailwind components;
@@ -38,7 +40,7 @@
 }
 
 html {
-  font-size: 20px; /* Increased from default 16px to scale up the website proportionally */
+  font-size: 16px; /* Increased from default 16px to scale up the website proportionally */
 }
 
 html,
@@ -176,9 +178,6 @@ a:hover {
    Font imports: Rajdhani (display) + Exo 2 (body)
 ───────────────────────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap');
-
-/* ── Root ── */
 .analytics-root {
   min-height: 100vh;
   background: #020a10;
@@ -709,4 +708,9 @@ a:hover {
   .navbar-status { display: none; }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 

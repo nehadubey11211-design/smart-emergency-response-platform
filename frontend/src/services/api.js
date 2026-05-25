@@ -7,10 +7,10 @@
  * WHY A CENTRALISED API MODULE?
  *   Instead of writing fetch() calls directly inside components, all HTTP
  *   requests are defined here.  Benefits:
- *     - One place to change the base URL (dev → staging → production)
+ *     - One place to change the base URL (dev -> staging -> production)
  *     - Interceptors run for EVERY request/response automatically
  *     - Easy to mock in tests (import this module, mock its exports)
- *     - Components stay clean — they just call getAccidents(), not axios.get(...)
+ *     - Components stay clean -- they just call getAccidents(), not axios.get(...)
  *
  * AXIOS vs FETCH:
  *   Axios is preferred here because:
@@ -20,29 +20,35 @@
  *     - Better TypeScript support
  *
  * INTERCEPTORS (key interview concept):
- *   Request interceptor  — runs BEFORE the request is sent
- *     → Attaches the JWT token to every outgoing request header
- *   Response interceptor — runs AFTER the response arrives
- *     → Catches 401 errors globally and redirects to login
+ *   Request interceptor  -- runs BEFORE the request is sent
+ *     -> Attaches the JWT token to every outgoing request header
+ *   Response interceptor -- runs AFTER the response arrives
+ *     -> Catches 401 errors globally and redirects to login
  *
  * INTERVIEW TALKING POINT:
  *   "Using Axios interceptors means I never forget to attach the auth header.
- *   It also gives me a single place to handle token expiry — if any request
+ *   It also gives me a single place to handle token expiry -- if any request
  *   returns 401, the interceptor clears storage and redirects to login,
  *   rather than handling that in every component."
  */
 
 import axios from "axios";
 
-// ─── Base URL ─────────────────────────────────────────────────────────────────
+// --- Base URL ----------------------------------------------------------------
 // import.meta.env reads Vite environment variables defined in frontend/.env
 // VITE_API_URL=http://localhost:8000/api  (dev)
 // In production: VITE_API_URL=https://api.yourdomain.com/api
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
-// ─── Axios Instance ───────────────────────────────────────────────────────────
+  /**
+ * Fetch dashboard summary
+ * @returns {Promise<any>}
+ */
+
+// --- Axios Instance ----------------------------------------------------------
 // Creating a custom instance lets us set defaults without affecting the
-// global axios object — important if you have multiple APIs in one app.
+// global axios object -- important if you have multiple APIs in one app.
 const api = axios.create({
   baseURL: BASE_URL,
 
@@ -51,11 +57,11 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 
-  // Timeout after 10 seconds — prevents requests hanging indefinitely
-  timeout: 10000,
+  // Timeout after 10 seconds -- prevents requests hanging indefinitely
+  timeout: 20000,
 });
 
-// ─── Request Interceptor ──────────────────────────────────────────────────────
+// --- Request Interceptor -----------------------------------------------------
 // Runs synchronously before every request is dispatched.
 // Reads the JWT from localStorage and adds it to the Authorization header.
 //
@@ -67,11 +73,11 @@ api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
     if (token) {
-      // Bearer token scheme — standard HTTP auth header format
+      // Bearer token scheme -- standard HTTP auth header format
       // The backend's get_current_user() dependency reads this header
       config.headers.Authorization = `Bearer ${token}`;
     }
-    return config;  // Must return config to proceed with the request
+    return config; // Must return config to proceed with the request
   },
   (error) => {
     // Request setup failed (e.g. network error before sending)
@@ -79,11 +85,11 @@ api.interceptors.request.use(
   }
 );
 
-// ─── Response Interceptor ─────────────────────────────────────────────────────
+// --- Response Interceptor ----------------------------------------------------
 // Runs after every response arrives (both success and error paths).
 
 api.interceptors.response.use(
-  // Success path (2xx status codes) — pass through unchanged
+  // Success path (2xx status codes) -- pass through unchanged
   (response) => response,
 
   // Error path (non-2xx status codes)
@@ -108,7 +114,7 @@ api.interceptors.response.use(
 );
 
 
-// ─── Authentication API ───────────────────────────────────────────────────────
+// --- Authentication API ------------------------------------------------------
 
 /**
  * POST /api/auth/login
@@ -126,13 +132,13 @@ export const register = (data) =>
   api.post("/auth/register", data);
 
 /**
- * GET /api/auth/me — returns the currently authenticated user's profile
- * @param {string} token — pass explicitly for page-load session restoration
+ * GET /api/auth/me -- returns the currently authenticated user's profile
+ * @param {string} token -- pass explicitly for page-load session restoration
  */
 export const getMe = (token) =>
   api.get("/auth/me", { params: { token } });
 
-// ─── Password Reset API ─────────────────────────────────────────────────────
+
 
 /**
  * POST /api/auth/send-reset-otp
@@ -159,15 +165,15 @@ export const resetPassword = (payload) =>
   api.post("/auth/reset-password", payload);
 
 
-// ─── Accidents API ────────────────────────────────────────────────────────────
+// --- Accidents API -----------------------------------------------------------
 
 /**
  * GET /api/accidents/
  * @param {{ status?: string, skip?: number, limit?: number }} params
  * @returns {Array} list of accident objects
  */
-export const getAccidents = (params = {}) =>
-  api.get("/accidents/", { params });
+export const getAccidents = (params = {}, config = {}) =>
+  api.get("/accidents/", { params, ...config });
 
 /**
  * GET /api/accidents/:id
@@ -177,7 +183,7 @@ export const getAccident = (id) =>
 
 /**
  * PATCH /api/accidents/:id
- * Partial update — only include fields you want to change
+ * Partial update -- only include fields you want to change
  * @param {{ status?: string, severity?: string, description?: string }} data
  */
 export const updateAccident = (id, data) =>
@@ -190,10 +196,10 @@ export const deleteAccident = (id) =>
   api.delete(`/accidents/${id}`);
 
 
-// ─── Traffic Signals API ──────────────────────────────────────────────────────
+// --- Traffic Signals API -----------------------------------------------------
 
 /**
- * GET /api/traffic/signals — all signals with current mode
+ * GET /api/traffic/signals -- all signals with current mode
  */
 export const getSignals = () =>
   api.get("/traffic/signals");
@@ -222,38 +228,38 @@ export const createGreenCorridor = (accidentId, hospitalId) =>
   });
 
 /**
- * POST /api/traffic/reset-corridor — reset all emergency signals to auto
+ * POST /api/traffic/reset-corridor -- reset all emergency signals to auto
  */
 export const resetCorridor = () =>
   api.post("/traffic/reset-corridor");
 
 
-// ─── Analytics API ────────────────────────────────────────────────────────────
+// --- Analytics API -----------------------------------------------------------
 
 /**
- * GET /api/analytics/summary — KPI numbers for summary cards
+ * GET /api/analytics/summary -- KPI numbers for summary cards
  * @returns {{ total_today, active_incidents, resolved_today, avg_response_time_minutes }}
  */
 export const getSummary = () =>
   api.get("/analytics/summary");
 
 /**
- * GET /api/analytics/severity-breakdown — pie chart data
+ * GET /api/analytics/severity-breakdown -- pie chart data
  * @returns {Array<{ severity: string, count: number }>}
  */
 export const getSeverityBreakdown = () =>
   api.get("/analytics/severity-breakdown");
 
 /**
- * GET /api/analytics/trends — line chart data
- * @param {number} days — lookback window (7, 14, or 30)
+ * GET /api/analytics/trends -- line chart data
+ * @param {number} days -- lookback window (7, 14, or 30)
  * @returns {Array<{ date: string, count: number }>}
  */
 export const getTrends = (days = 7) =>
   api.get("/analytics/trends", { params: { days } });
 
 /**
- * GET /api/analytics/hotspots — top accident-prone locations
+ * GET /api/analytics/hotspots -- top accident-prone locations
  */
 export const getHotspots = (limit = 10) =>
   api.get("/analytics/hotspots", { params: { limit } });
