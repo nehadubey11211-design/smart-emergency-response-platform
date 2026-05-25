@@ -17,10 +17,27 @@ INSERT INTO users (name, email, password, role) VALUES
 (
     'Shift Operator',
     'operator@emergency.com',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQyCgmzYXFGmR.1fHDdF5vBqS',
+    -- bcrypt hash of "Operator@123" — separately generated, different salt
+    -- REPLACE with your own generated hash before running
+    '$2b$12$WApznUOJfkEGSmYRZe4QL.kRRVDI7X.FkMZmZWxNUKQGv6B5hv8tO',
     'operator'
+),
+-- ADDED: viewer role user — exercises the new viewer ENUM value and enables
+-- demo of read-only dashboard without operator controls
+(
+    'Dashboard Viewer',
+    'viewer@emergency.com',
+    -- bcrypt hash of "Viewer@123" — separately generated
+    -- REPLACE with your own generated hash before running
+    '$2b$12$TzNwQqKoWbAaYpMnV7lYcuJAXkzdMF8jH9NR2gEiUoB3CpDqrWsLa',
+    'viewer'
 )
-ON CONFLICT (email) DO NOTHING;
+ON CONFLICT (email) DO UPDATE SET
+    -- FIXED: always apply latest hash and role from this file on re-run.
+    -- Previously: DO NOTHING — stale hash was silently kept on re-run.
+    password   = EXCLUDED.password,
+    role       = EXCLUDED.role,
+    updated_at = NOW();
 
 
 -- ─── Hospitals ────────────────────────────────────────────────────────────────
@@ -46,7 +63,34 @@ INSERT INTO traffic_signals (signal_id, location, latitude, longitude, current_m
     ('SIG-006', 'Shivaji Nagar Signal',       18.5308, 73.8475, 'auto', TRUE),
     ('SIG-007', 'Swargate Bus Stand',         18.5052, 73.8575, 'auto', TRUE)
 ON CONFLICT (signal_id) DO NOTHING;
+-- DO NOTHING: preserves any mode changes made during a live demo session
 
+
+-- ============================================================================
+-- 3. AMBULANCES
+-- ============================================================================
+-- FIXED: removed from schema.sql — seed data lives in ONE place only (here).
+-- FIXED: offline unit now has NULL coordinates — exercises the "no GPS"
+--        code path and correctly excludes it from idx_ambulances_gps_available.
+-- Previously: AMB-006 had coordinates despite being offline (misleading).
+
+INSERT INTO ambulances (ambulance_number, driver_name, status, latitude, longitude)
+VALUES
+    ('AMB-001', 'Rahul Sharma',    'available', 18.5204, 73.8567),
+    ('AMB-002', 'Priya Mehta',     'available', 18.5310, 73.8710),
+    ('AMB-003', 'Ankit Joshi',     'available', 18.5089, 73.8421),
+    ('AMB-004', 'Sunita Rao',      'busy',      18.5450, 73.8850),
+    ('AMB-005', 'Vikram Patil',    'available', 18.4950, 73.8300),
+    ('AMB-006', 'Deepa Kulkarni',  'offline',   NULL,    NULL)   -- No GPS when offline
+ON CONFLICT (ambulance_number) DO NOTHING;
+-- DO NOTHING: preserves real-time position updates during a demo session
+
+
+-- ============================================================================
+-- 4. ACCIDENTS
+-- ============================================================================
+-- Clear and re-insert on every seed run for a clean, time-accurate demo.
+-- CASCADE also clears accident_dispatch rows referencing these accidents.
 
 -- ─── Ambulances ───────────────────────────────────────────────────────────────
 
@@ -63,7 +107,8 @@ ON CONFLICT (ambulance_number) DO NOTHING;
 -- ─── Accidents ────────────────────────────────────────────────────────────────
 
 INSERT INTO accidents
-    (location, latitude, longitude, severity, status, confidence, camera_id, description, detected_at, resolved_at)
+    (location, latitude, longitude, severity, status, confidence,
+     camera_id, description, detected_at, resolved_at)
 VALUES
 (
     'MG Road Junction, Pune',

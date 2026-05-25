@@ -15,7 +15,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.models.accident_model import SeverityLevel, AccidentStatus
+from app.models.accident_model import SeverityLevel, accident_status
 
 
 # ─── Create Schema ────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ class AccidentUpdate(BaseModel):
     All fields are Optional — the client sends only what changed.
     This is the standard 'partial update' pattern.
     """
-    status:      Optional[AccidentStatus] = None
+    status:      Optional[accident_status] = None
     severity:    Optional[SeverityLevel]  = None
     description: Optional[str]            = Field(None, max_length=1000)
 
@@ -81,7 +81,7 @@ class AccidentResponse(BaseModel):
     latitude:     Optional[float]
     longitude:    Optional[float]
     severity:     SeverityLevel
-    status:       AccidentStatus
+    status:       accident_status
     confidence:   Optional[float]
     camera_id:    Optional[str]
     description:  Optional[str]

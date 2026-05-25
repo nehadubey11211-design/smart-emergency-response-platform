@@ -19,6 +19,10 @@ DROP TYPE IF EXISTS accident_status  CASCADE;
 DROP TYPE IF EXISTS signal_mode      CASCADE;
 DROP TYPE IF EXISTS ambulance_status CASCADE;
 
+DROP TABLE IF EXISTS ambulances       CASCADE;
+DROP TABLE IF EXISTS traffic_signals  CASCADE;
+DROP TABLE IF EXISTS accidents        CASCADE;
+DROP TABLE IF EXISTS users            CASCADE;
 
 -- ─── ENUM Types ───────────────────────────────────────────────────────────────
 
@@ -37,6 +41,31 @@ CREATE TYPE signal_mode AS ENUM (
 CREATE TYPE ambulance_status AS ENUM (
     'available', 'busy', 'offline'
 );
+
+CREATE TYPE ambulance_status AS ENUM (
+    'available',   -- Ready for dispatch
+    'busy',        -- Currently responding to an incident
+    'offline'      -- Out of service / maintenance
+);
+
+
+-- ============================================================================
+-- 3. SHARED TRIGGER FUNCTION  (reused by multiple tables)
+-- ============================================================================
+-- A single function that sets NEW.updated_at = NOW() on every row UPDATE.
+-- Attached to tables via individual triggers below.
+
+CREATE OR REPLACE FUNCTION fn_set_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION fn_set_updated_at() IS
+    'Generic BEFORE UPDATE trigger function — sets updated_at to NOW().';
 
 
 -- ─── Users ────────────────────────────────────────────────────────────────────
@@ -58,6 +87,13 @@ CREATE TABLE users (
 
 CREATE INDEX idx_users_email ON users(email);
 
+-- FIXED: partial index covers only active users — smaller, faster for auth queries.
+-- Previously: CREATE INDEX idx_users_email ON users(email) — full table index.
+-- Auth query is always: WHERE email = ? AND is_active = TRUE
+-- Inactive users are excluded from the index entirely.
+CREATE UNIQUE INDEX idx_users_email_active
+    ON users (email)
+    WHERE is_active = TRUE;
 
 -- ─── Hospitals ────────────────────────────────────────────────────────────────
 
@@ -146,7 +182,12 @@ CREATE TABLE traffic_signals (
     last_update  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_signals_mode ON traffic_signals(current_mode);
+COMMENT ON TABLE  accident_dispatch              IS 'Which ambulance was dispatched to which accident, with timestamps.';
+COMMENT ON COLUMN accident_dispatch.arrived_at   IS 'NULL until unit confirms on-scene arrival.';
+COMMENT ON COLUMN accident_dispatch.cleared_at   IS 'NULL until unit clears the scene.';
+
+CREATE INDEX idx_dispatch_accident  ON accident_dispatch (accident_id);
+CREATE INDEX idx_dispatch_ambulance ON accident_dispatch (ambulance_id);
 
 
 -- ─── Traffic Signal Events (audit log) ───────────────────────────────────────

@@ -1,4 +1,4 @@
-﻿"""
+"""
 FILE: backend/app/routes/analytics.py
 ============================================
 Analytics & Reporting Endpoints
@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
 from app.routes.auth import get_current_user_from_header
-from app.models.accident_model import Accident, AccidentStatus
+from app.models.accident_model import Accident, accident_status
 
 router = APIRouter(dependencies=[Depends(get_current_user_from_header)])
 
@@ -52,13 +52,13 @@ async def get_summary(db: AsyncSession = Depends(get_db)):
     )
 
     active_incidents = await db.scalar(
-        select(func.count()).select_from(Accident).where(Accident.status != AccidentStatus.resolved)
+        select(func.count()).select_from(Accident).where(Accident.status != accident_status.resolved)
     )
 
     resolved_today = await db.scalar(
         select(func.count()).select_from(Accident).where(
             func.date(Accident.detected_at) == today,
-            Accident.status == AccidentStatus.resolved,
+            Accident.status == accident_status.resolved,
         )
     )
 
