@@ -30,6 +30,8 @@ INTERVIEW TALKING POINT:
   check. This warms up Neon's serverless compute so the first user
   request isn't slow after a period of inactivity."
 """
+import logging
+logger = logging.getLogger(__name__) 
 import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 

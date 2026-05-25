@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
 from app.integrations.accident_dispatch import trigger_ambulance_dispatch
-from app.models.accident_model import Accident, AccidentStatus
+from app.models.accident_model import Accident, accident_status
 from app.schemas.accident_schema import (
     AccidentCreate,
     AccidentResponse,
@@ -171,7 +171,7 @@ async def update_accident(
     for field, value in updates.items():
         setattr(accident, field, value)
 
-    if update_data.status == AccidentStatus.resolved and accident.resolved_at is None:
+    if update_data.status == accident_status.resolved and accident.resolved_at is None:
         accident.resolved_at = datetime.now(tz=timezone.utc)
 
     await db.commit()

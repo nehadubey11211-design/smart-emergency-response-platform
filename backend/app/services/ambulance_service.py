@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.ambulance import Ambulance, AmbulanceStatus
-from app.models.accident_model import Accident, AccidentStatus
+from app.models.accident_model import Accident, accident_status
 from app.schemas.ambulance import (
     AmbulanceCreate,
     AmbulanceLocationUpdate,
@@ -273,7 +273,7 @@ async def complete_dispatch(
         result = await db.execute(select(Accident).where(Accident.id == accident_id))
         accident = result.scalar_one_or_none()
         if accident:
-            accident.status = AccidentStatus.resolved
+            accident.status = accident_status.resolved
             accident.resolved_at = datetime.now(tz=timezone.utc)
             logger.info("Accident #%d marked resolved.", accident_id)
 

@@ -1,0 +1,29 @@
+{
+  "class_indices": {
+    "accident": 0,
+    "normal": 1,
+    "traffic_jam": 2
+  },
+  "idx_to_class": {
+    "0": "accident",
+    "1": "normal",
+    "2": "traffic_jam"
+  },
+  "num_classes": 3,
+  "img_size": [
+    224,
+    224
+  ],
+  "preprocessing": "mobilenet_v2.preprocess_input maps to [-1,1]",
+  "color_format": "RGB",
+  "train_samples": 4118,
+  "val_samples": 725,
+  "class_distribution": {
+    "accident": 2483,
+    "normal": 1411,
+    "traffic_jam": 224
+  },
+  "tensorflow_version": "2.16.1",
+  "python_version": "3.10.11",
+  "trained_at": "20260523_132354"
+}

@@ -13,7 +13,7 @@ ENUM TYPES:
   even if someone bypasses the API and inserts directly into the DB.
 
   SeverityLevel : How serious the incident is (drives alert priority)
-  AccidentStatus: Current state in the response workflow
+  Accident_Status: Current state in the response workflow
 
 INTERVIEW TALKING POINT:
   "Using database-level ENUMs rather than just VARCHAR means the constraint
@@ -44,7 +44,7 @@ class SeverityLevel(str, enum.Enum):
     critical = "critical"  # Life-threatening — multiple casualties, road blocked
 
 
-class AccidentStatus(str, enum.Enum):
+class accident_status(str, enum.Enum):
     """
     Tracks where the incident is in the response lifecycle.
     Drives the dashboard UI colour coding and filter options.
@@ -94,8 +94,8 @@ class Accident(Base):
 
     # Status moves through the lifecycle: detected → responding → resolved
     status = Column(
-        Enum(AccidentStatus),
-        default=AccidentStatus.detected,
+        Enum(accident_status),
+        default=accident_status.detected,
         nullable=False,
         index=True,   # Indexed because we frequently filter by status
     )
