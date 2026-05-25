@@ -1,5 +1,8 @@
 {
   "dependencies": {
+    "framer-motion": "^12.38.0",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.16.0",
     "leaflet": "^1.9.4",
     "lodash.debounce": "^4.0.8",
     "prop-types": "^15.8.1",

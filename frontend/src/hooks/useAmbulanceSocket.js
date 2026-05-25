@@ -112,17 +112,16 @@ export function useAmbulanceSocket(ambulanceId) {
   // ── Connection lifecycle ──────────────────────────────────────────────
 
   const connect = useCallback(() => {
+    if (!ambulanceId) return;
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
 
-  if (!ambulanceId) return;
+    if (!token) {
+      console.warn("[AmbulanceWS] No auth token — skipping connection");
+      return;
+    }
 
-  if (wsRef.current?.readyState === WebSocket.OPEN ||
-      wsRef.current?.readyState === WebSocket.CONNECTING)
-     {
-    return;
-  }
-
-    
-    const url = `${WS_BASE}/api/ambulances/ws/${ambulanceId}`;
+    const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+    const url = `${WS_BASE}/api/v1/ambulances/ws/${ambulanceId}?token=${token}`;
     const ws  = new WebSocket(url);
     wsRef.current = ws;
     setConnectionStatus("connecting");

@@ -36,9 +36,10 @@ Interview talking point — Anti-corruption layer:
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.ambulance_service  import (
+from app.services.ambulance_service import (
     get_nearby_ambulances,
     dispatch_nearest_ambulance,
 )
@@ -46,13 +47,11 @@ from app.websockets.ambulance_manager import ambulance_ws_manager
 
 logger = logging.getLogger(__name__)
 
-# Ambulances within this radius receive an awareness alert even if
-# they were NOT the one dispatched (so they know help is en-route)
 _AWARENESS_RADIUS_KM = 15.0
 
 
 async def trigger_ambulance_dispatch(
-    db:            Session,
+    db:            AsyncSession,
     accident_id:   int,
     accident_lat:  float,
     accident_lon:  float,
@@ -78,10 +77,9 @@ async def trigger_ambulance_dispatch(
         "[Dispatch] Accident #%d at (%.4f, %.4f) — severity=%s confidence=%.0f%%",
         accident_id, accident_lat, accident_lon, severity, confidence * 100,
     )
-
-    # ── Step 1: auto-dispatch nearest unit ───────────────────────────────
+ # ── Step 1: auto-dispatch nearest unit ───────────────────────────────
     try:
-        result = dispatch_nearest_ambulance(db, accident_lat, accident_lon)
+        result = await dispatch_nearest_ambulance(db, accident_lat, accident_lon)
     except Exception as exc:
         logger.error("[Dispatch] dispatch_nearest_ambulance raised: %s", exc)
         result = None
@@ -122,14 +120,14 @@ async def trigger_ambulance_dispatch(
         logger.warning(
             "[Dispatch] No available ambulances near accident #%d.", accident_id
         )
-
-    # ── Step 3: awareness alert to ALL other nearby units ────────────────
+        
+ # ── Step 3: awareness alert to ALL other nearby units ────────────────
     try:
-        nearby = get_nearby_ambulances(
+        nearby = await get_nearby_ambulances(
             db, accident_lat, accident_lon, radius_km=_AWARENESS_RADIUS_KM
         )
-        # Exclude the unit that was just dispatched (it already received a fuller alert)
         awareness_ids = [u.id for u in nearby if u.id != dispatched_id]
+   # Exclude the unit that was just dispatched (it already received a fuller alert)
 
         if awareness_ids:
             awareness_payload = {

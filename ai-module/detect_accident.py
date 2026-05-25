@@ -37,8 +37,8 @@ INTERVIEW TALKING POINT:
   It runs comfortably in real-time on a CPU."
 """
 
+import logging
 import os
-from symtable import Class
 import sys
 import time
 from datetime import datetime
@@ -46,6 +46,8 @@ from datetime import datetime
 import cv2
 import numpy as np
 import requests
+
+logger = logging.getLogger(__name__)
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 # Centralise all tunable values at the top — easier to change without
@@ -98,17 +100,17 @@ def load_model():
         import tensorflow as tf
 
         if not os.path.exists(MODEL_PATH):
-            print(f"❌ Model not found at: {MODEL_PATH}")
-            print("   Run python train_model.py first to train and save the model.")
+            logger.error("Model not found at: %s", MODEL_PATH)
+            logger.error("Run python train_model.py first to train and save the model.")
             return None
 
-        print(f"⏳ Loading model from {MODEL_PATH}…")
+        logger.info("Loading model from %s", MODEL_PATH)
         model = tf.keras.models.load_model(MODEL_PATH)
-        print(f"✅ Model loaded. Input shape: {model.input_shape}")
+        logger.info("Model loaded. Input shape: %s", model.input_shape)
         return model
 
     except Exception as e:
-        print(f"❌ Failed to load model: {e}")
+        logger.error("Failed to load model: %s", e)
         return None
 
 
@@ -196,20 +198,24 @@ def send_alert_to_backend(
 
         if response.status_code == 201:
             accident_id = response.json().get("id", "?")
-            print(f"   ✅ Alert sent → Accident #{accident_id} created in database")
+            logger.info("Alert sent -> Accident #%s created in database", accident_id)
             return True
         else:
-            print(f"   ⚠️  Backend returned HTTP {response.status_code}: {response.text[:100]}")
+            logger.warning(
+                "Backend returned HTTP %s: %s",
+                response.status_code,
+                response.text[:100],
+            )
             return False
 
     except requests.exceptions.ConnectionError:
-        print("   ❌ Cannot reach backend — is FastAPI running on localhost:8000?")
+        logger.error("Cannot reach backend — is FastAPI running on localhost:8000?")
         return False
     except requests.exceptions.Timeout:
-        print("   ⚠️  Backend timed out after 5s")
+        logger.warning("Backend timed out after 5s")
         return False
     except Exception as e:
-        print(f"   ❌ Unexpected error sending alert: {e}")
+        logger.error("Unexpected error sending alert: %s", e)
         return False
 
 
@@ -234,19 +240,23 @@ def run_detection():
         sys.exit(1)
 
     # Step 2: Open video source
-    print(f"\n🎥 Opening video source: {VIDEO_SOURCE}")
+    logger.info("Opening video source: %s", VIDEO_SOURCE)
     cap = cv2.VideoCapture(VIDEO_SOURCE)
 
     if not cap.isOpened():
-        print(f"❌ Cannot open video source: {VIDEO_SOURCE}")
-        print("   Ensure your webcam is connected or the file path is correct.")
+        logger.error("Cannot open video source: %s", VIDEO_SOURCE)
+        logger.error("Ensure your webcam is connected or the file path is correct.")
         sys.exit(1)
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    print(f"✅ Video source opened | FPS: {fps:.0f} | Camera: {CAMERA_ID}")
-    print(f"   Analyzing every {FRAME_INTERVAL} frames ({fps/FRAME_INTERVAL:.1f} inferences/s)")
-    print(f"   Confidence threshold: {CONFIDENCE_THRESHOLD:.0%}")
-    print("   Press 'q' to quit\n")
+    logger.info("Video source opened | FPS: %.0f | Camera: %s", fps, CAMERA_ID)
+    logger.info(
+        "Analyzing every %s frames (%.1f inferences/s)",
+        FRAME_INTERVAL,
+        fps / FRAME_INTERVAL,
+    )
+    logger.info("Confidence threshold: %.0f%%", CONFIDENCE_THRESHOLD * 100)
+    logger.info("Press 'q' to quit")
 
     frame_count      = 0
     last_alert_time  = 0
@@ -256,7 +266,7 @@ def run_detection():
             ret, frame = cap.read()
 
             if not ret:
-                print("📹 End of video stream or camera disconnected")
+                logger.info("End of video stream or camera disconnected")
                 break
 
             frame_count += 1
@@ -273,10 +283,11 @@ def run_detection():
             confidence   = float(predictions[class_idx])
             label        = CLASS_LABELS[class_idx]
 
-            print(
-                f"[Frame {frame_count:06d}] "
-                f"{label:<12} "
-                f"confidence: {confidence:.1%}"
+            logger.info(
+                "[Frame %06d] %s confidence: %.1f%%",
+                frame_count,
+                label,
+                confidence * 100,
             )
 
             # ── Trigger alert if accident detected ───────────────────────
@@ -286,12 +297,12 @@ def run_detection():
 
                 if seconds_since_last < ALERT_COOLDOWN_SECONDS:
                     remaining = ALERT_COOLDOWN_SECONDS - seconds_since_last
-                    print(f"   ⏸  Cooldown active — next alert in {remaining:.0f}s")
+                    logger.info("Cooldown active — next alert in %.0fs", remaining)
                 else:
-                    print(
-                        f"\n🚨 ACCIDENT DETECTED! "
-                        f"Confidence: {confidence:.1%} | "
-                        f"Camera: {CAMERA_ID}"
+                    logger.warning(
+                        "ACCIDENT DETECTED! Confidence: %.1f%% | Camera: %s",
+                        confidence * 100,
+                        CAMERA_ID,
                     )
                     severity = confidence_to_severity(confidence)
                     success  = send_alert_to_backend(
@@ -336,18 +347,19 @@ def run_detection():
 
             # 'q' key exits the loop
             if cv2.waitKey(1) & 0xFF == ord("q"):
-                print("👋 Detection stopped by user")
+                logger.info("Detection stopped by user")
                 break
 
     except KeyboardInterrupt:
-        print("\n👋 Detection stopped (Ctrl+C)")
+        logger.info("Detection stopped (Ctrl+C)")
     finally:
         # Always release the camera and close windows — even on error
         cap.release()
         cv2.destroyAllWindows()
-        print("🛑 Camera released. Detection ended.")
+        logger.info("Camera released. Detection ended.")
 
 
 # ─── Entry Point ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     run_detection()

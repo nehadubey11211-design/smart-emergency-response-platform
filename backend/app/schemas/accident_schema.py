@@ -8,17 +8,12 @@ Three schema categories for accidents:
   1. AccidentCreate  — what the AI module POSTs when it detects something
   2. AccidentUpdate  — what an operator PATCHes (status/severity changes)
   3. AccidentResponse — what the API returns to the dashboard
-
-Using separate Create/Update/Response schemas is a standard REST API pattern:
-  - POST bodies often have fewer fields than stored records
-  - PATCH bodies should have ALL fields optional (partial update)
-  - Response adds server-generated fields (id, timestamps) the client never sends
 """
 
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.accident_model import SeverityLevel, AccidentStatus
 
@@ -53,6 +48,12 @@ class AccidentCreate(BaseModel):
 
     # Auto-generated description from AI or entered by operator
     description: Optional[str] = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_gps_pair(self):
+      if (self.latitude is None) != (self.longitude is None):
+        raise ValueError("latitude and longitude must both be provided or both omitted")
+      return self
 
 
 # ─── Update Schema ────────────────────────────────────────────────────────────

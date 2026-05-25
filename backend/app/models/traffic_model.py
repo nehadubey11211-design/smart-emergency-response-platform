@@ -4,10 +4,6 @@ FILE: backend/app/models/traffic_model.py
 SQLAlchemy ORM Model — Traffic Signals Table
 ================================================
 
-Each row represents one physical traffic signal controller in the field.
-The system communicates with these over IoT protocols (MQTT / HTTP) to
-switch them between normal and emergency modes.
-
 SIGNAL MODES:
   auto      — Normal timed cycle (default operation)
   emergency — Green corridor active (ambulance passing through)
@@ -15,8 +11,9 @@ SIGNAL MODES:
 """
 
 import enum
+from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, Index, ForeignKey
 from sqlalchemy.sql import func
 
 from app.database.db import Base
@@ -65,7 +62,7 @@ class TrafficSignal(Base):
     # ── State ───────────────────────────────────────────────────────────────
     # Current operating mode — the authoritative state in the system
     current_mode = Column(
-        Enum(SignalMode),
+        Enum(SignalMode, name="signal_mode"),
         default=SignalMode.auto,
         nullable=False,
     )
@@ -80,13 +77,35 @@ class TrafficSignal(Base):
     last_update = Column(
         DateTime(timezone=True),
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_signal_online_mode", "is_online", "current_mode"),
     )
 
     def __repr__(self) -> str:
         return (
             f"<TrafficSignal id={self.signal_id!r} "
             f"mode={self.current_mode} online={self.is_online}>"
+        )
+
+
+class TrafficSignalEvent(Base):
+    __tablename__ = "traffic_signal_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    signal_id = Column(String(50), ForeignKey("traffic_signals.signal_id", ondelete="CASCADE"), nullable=False, index=True)
+    from_mode = Column(Enum(SignalMode, name="signal_mode"), nullable=False)
+    to_mode = Column(Enum(SignalMode, name="signal_mode"), nullable=False)
+    triggered_by = Column(String(100), nullable=True)  # e.g. "auto-dispatch", "operator:3"
+    accident_id = Column(Integer, ForeignKey("accidents.id", ondelete="SET NULL"), nullable=True)
+    occurred_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<TrafficSignalEvent id={self.id} signal_id={self.signal_id!r} "
+            f"from={self.from_mode} to={self.to_mode} at={self.occurred_at}>"
         )
     

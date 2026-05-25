@@ -3,53 +3,6 @@ FILE: backend/app/routes/password_reset.py
 ============================================
 Password Reset Endpoints
 ============================================
-
-FOLLOWS THE SAME ROUTE PATTERN AS auth.py:
-  - APIRouter with prefix and tags
-  - Depends(get_db) for the SQLAlchemy session
-  - Thin handlers: validate input → call service → return response
-  - Consistent HTTP status codes and error handling
-
-REGISTRATION IN main.py:
-  Add these two lines to backend/app/main.py alongside the other routers:
-
-      from app.routes import password_reset           # ← add this import
-
-      app.include_router(
-          password_reset.router,
-          prefix="/api/password",
-          tags=["🔐 Password Reset"],
-      )
-
-  After adding that, the Swagger UI at /docs will show:
-      POST /api/password/forgot
-      POST /api/password/verify-otp
-
-API FLOW — step by step:
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  Step 1: User forgets their password                            │
-  │    → POST /api/password/forgot  { "email": "user@example.com" }│
-  │    → Server: checks DB, generates OTP, sends email              │
-  │    → Response: 200 { "message": "OTP sent..." }                 │
-  │                                                                 │
-  │  Step 2: User checks email, gets OTP, submits new password      │
-  │    → POST /api/password/verify-otp                              │
-  │         { "email": "...", "otp": "482910", "new_password": "..." }│
-  │    → Server: verifies OTP, hashes password, updates DB          │
-  │    → Response: 200 { "message": "Password reset successfully." }│
-  └─────────────────────────────────────────────────────────────────┘
-
-RATE LIMITING:
-  Uses slowapi (pip install slowapi) — integrates directly with FastAPI.
-  The limiter instance is created here and registered globally in main.py.
-
-  Limits:
-    POST /forgot     → 3 requests per hour per IP
-    POST /verify-otp → 10 requests per hour per IP
-
-  The /verify-otp limit is looser because brute-force is already
-  blocked by the 3-attempt counter in OTPService._verify_otp().
-  A 429 response is returned automatically when the limit is exceeded.
 """
 
 import smtplib
@@ -58,7 +11,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.db import get_db
 from app.schemas.password_reset_schema import (
@@ -101,7 +54,7 @@ router = APIRouter()
 async def forgot_password(
     request: Request,                       # required by slowapi to read client IP
     body: ForgotPasswordRequest,            # Pydantic schema — moved to `body`
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     POST /api/password/forgot
@@ -183,7 +136,7 @@ async def forgot_password(
 async def verify_otp_and_reset(
     request: Request,                       # required by slowapi to read client IP
     body: VerifyOTPRequest,                 # Pydantic schema — moved to `body`
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     POST /api/password/verify-otp

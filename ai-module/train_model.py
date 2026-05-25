@@ -50,10 +50,13 @@ INTERVIEW TALKING POINT:
   The two-phase training (frozen base → fine-tune) is standard practice."
 """
 
+import logging
 import os
 import sys
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # Lazy import of TensorFlow — avoids slow startup if just checking args
 try:
@@ -68,7 +71,8 @@ try:
         ModelCheckpoint, EarlyStopping, ReduceLROnPlateau, TensorBoard
     )
 except ImportError:
-    print("❌ TensorFlow not found. Run: pip install tensorflow")
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger(__name__).error("TensorFlow not found. Run: pip install tensorflow")
     sys.exit(1)
 
 
@@ -169,7 +173,11 @@ def build_model() -> Model:
 
     # Freeze all base model layers — their weights won't change during Phase 1
     base_model.trainable = False
-    print(f"📦 Base model: {base_model.name} | Layers: {len(base_model.layers)} (all frozen)")
+    logger.info(
+        "Base model: %s | Layers: %s (all frozen)",
+        base_model.name,
+        len(base_model.layers),
+    )
 
     # Build our classification head on top
     x = base_model.output
@@ -184,7 +192,7 @@ def build_model() -> Model:
     trainable_params = sum(
         [tf.keras.backend.count_params(w) for w in model.trainable_weights]
     )
-    print(f"🧠 Trainable parameters (Phase 1): {trainable_params:,}")
+    logger.info("Trainable parameters (Phase 1): %s", f"{trainable_params:,}")
 
     return model,base_model
 
@@ -248,9 +256,7 @@ def phase1_train_head(model, train_gen, val_gen) -> dict:
 
     Higher learning rate (1e-3) is safe because we're only training the small head.
     """
-    print("\n" + "═"*55)
-    print("PHASE 1: Training classification head (base frozen)")
-    print("═"*55)
+    logger.info("PHASE 1: Training classification head (base frozen)")
 
     model.compile(
         optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3),
@@ -266,9 +272,9 @@ def phase1_train_head(model, train_gen, val_gen) -> dict:
         verbose         = 1,
     )
 
-    print(
-        f"\n✅ Phase 1 complete. "
-        f"Best val_accuracy: {max(history.history['val_accuracy']):.2%}"
+    logger.info(
+        "Phase 1 complete. Best val_accuracy: %.2f%%",
+        max(history.history["val_accuracy"]) * 100,
     )
     return history.history
 
@@ -283,13 +289,11 @@ def phase2_fine_tune(model, base_model, train_gen, val_gen) -> dict:
       toward our task, not overwrite them with random noise.
       Too high an LR here would destroy the pretrained features.
     """
-    print("\n" + "═"*55)
-    print("PHASE 2: Fine-tuning top layers of base model")
-    print("═"*55)
+    logger.info("PHASE 2: Fine-tuning top layers of base model")
 
    # base_model = model.layers[1]   # MobileNetV2 is the second layer (after Input)
     base_model.trainable = True
-    print("DEBUG base_model type:", type(base_model))
+    logger.debug("base_model type: %s", type(base_model))
     # Freeze everything EXCEPT the last 30 layers of the base model
     for layer in base_model.layers[:-30]:
         layer.trainable = False
@@ -297,7 +301,7 @@ def phase2_fine_tune(model, base_model, train_gen, val_gen) -> dict:
     fine_tune_params = sum(
         [tf.keras.backend.count_params(w) for w in model.trainable_weights]
     )
-    print(f"🧠 Trainable parameters (Phase 2): {fine_tune_params:,}")
+    logger.info("Trainable parameters (Phase 2): %s", f"{fine_tune_params:,}")
 
     # Recompile with a lower learning rate for fine-tuning
     model.compile(
@@ -314,9 +318,9 @@ def phase2_fine_tune(model, base_model, train_gen, val_gen) -> dict:
         verbose         = 1,
     )
 
-    print(
-        f"\n✅ Phase 2 complete. "
-        f"Best val_accuracy: {max(history.history['val_accuracy']):.2%}"
+    logger.info(
+        "Phase 2 complete. Best val_accuracy: %.2f%%",
+        max(history.history["val_accuracy"]) * 100,
     )
     return history.history
 
@@ -324,29 +328,29 @@ def phase2_fine_tune(model, base_model, train_gen, val_gen) -> dict:
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
-    print("🚀 Starting model training pipeline")
-    print(f"   Dataset:    {DATASET_DIR}")
-    print(f"   Output:     {MODEL_OUTPUT}")
-    print(f"   Image size: {IMG_SIZE}")
-    print(f"   Batch size: {BATCH_SIZE}")
-    print(f"   GPU available: {len(tf.config.list_physical_devices('GPU')) > 0}")
+    logger.info("Starting model training pipeline")
+    logger.info("Dataset: %s", DATASET_DIR)
+    logger.info("Output: %s", MODEL_OUTPUT)
+    logger.info("Image size: %s", IMG_SIZE)
+    logger.info("Batch size: %s", BATCH_SIZE)
+    logger.info("GPU available: %s", len(tf.config.list_physical_devices("GPU")) > 0)
 
     # ── Validate dataset ─────────────────────────────────────────────────
     if not os.path.exists(DATASET_DIR):
-        print(f"\n❌ Dataset directory not found: {DATASET_DIR}")
-        print("   Create it and add image subdirectories:")
+        logger.error("Dataset directory not found: %s", DATASET_DIR)
+        logger.error("Create it and add image subdirectories:")
         for cls in ["accident", "normal", "traffic_jam"]:
-            print(f"     dataset/{cls}/  ← add images here")
+            logger.error("  dataset/%s/  <- add images here", cls)
         sys.exit(1)
 
     classes_found = [
         d for d in os.listdir(DATASET_DIR)
         if os.path.isdir(os.path.join(DATASET_DIR, d))
     ]
-    print(f"\n📂 Found {len(classes_found)} class folders: {sorted(classes_found)}")
+    logger.info("Found %s class folders: %s", len(classes_found), sorted(classes_found))
 
     if len(classes_found) < 2:
-        print("❌ Need at least 2 class folders with images")
+        logger.error("Need at least 2 class folders with images")
         sys.exit(1)
 
     os.makedirs(MODEL_DIR, exist_ok=True)
@@ -356,8 +360,8 @@ def main():
     train_gen, val_gen = build_data_generators()
 
     # Print label → index mapping (CRITICAL: save this for inference!)
-    print(f"\n🏷  Class indices: {train_gen.class_indices}")
-    print("   ⚠️  Make sure CLASS_LABELS in detect_accident.py matches this order!")
+    logger.info("Class indices: %s", train_gen.class_indices)
+    logger.warning("Make sure CLASS_LABELS in detect_accident.py matches this order!")
 
     # ── Build model ──────────────────────────────────────────────────────
     model, base_model = build_model()
@@ -369,16 +373,17 @@ def main():
     phase2_fine_tune(model, base_model ,train_gen, val_gen)
 
     # ── Evaluate ─────────────────────────────────────────────────────────
-    print("\n📊 Final evaluation on validation set:")
+    logger.info("Final evaluation on validation set:")
     loss, accuracy = model.evaluate(val_gen, verbose=0)
-    print(f"   Loss:     {loss:.4f}")
-    print(f"   Accuracy: {accuracy:.2%}")
+    logger.info("Loss: %.4f", loss)
+    logger.info("Accuracy: %.2f%%", accuracy * 100)
 
-    print(f"\n✅ Training complete. Model saved to: {MODEL_OUTPUT}")
-    print("   Next steps:")
-    print("   1. Run: python detect_accident.py")
-    print("   2. Or: tensorboard --logdir model/logs  (visualise training)")
+    logger.info("Training complete. Model saved to: %s", MODEL_OUTPUT)
+    logger.info("Next steps:")
+    logger.info("  1. Run: python detect_accident.py")
+    logger.info("  2. Or: tensorboard --logdir model/logs  (visualise training)")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()
