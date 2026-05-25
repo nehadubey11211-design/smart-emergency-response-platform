@@ -31,6 +31,7 @@ export default function StatusPanel() {
   const [wsConnected,  setWsConnected]  = useState(false);
   const [lastEvent,    setLastEvent]    = useState(null);
   const [currentTime,  setCurrentTime]  = useState(new Date());
+  const [apiHealthy, setApiHealthy] = useState(null);
 
   useEffect(() => {
     // ── Connect WebSocket if not already connected ──────────────────────
@@ -49,6 +50,26 @@ export default function StatusPanel() {
       setWsConnected(socketService.isConnected);
     }, 2000);
 
+    const checkApiHealth = async () => {
+  try {
+    const response = await fetch("/api/health");
+
+    if (response.ok) {
+      setApiHealthy(true);
+    } else {
+      setApiHealthy(false);
+    }
+  } catch {
+    setApiHealthy(false);
+  }
+};
+
+// Initial check
+checkApiHealth();
+
+// Repeat every 30 seconds
+const apiHealthInterval = setInterval(checkApiHealth, 30000);
+
     // ── Live clock: update every second ─────────────────────────────────
     const clock = setInterval(() => {
       setCurrentTime(new Date());
@@ -58,7 +79,8 @@ export default function StatusPanel() {
     return () => {
       socketService.off("NEW_ACCIDENT", handleNewAccident);  // Unsubscribe
       clearInterval(wsCheck);                                 // Stop WS polling
-      clearInterval(clock);                                   // Stop clock
+      clearInterval(clock);    
+      clearInterval(apiHealthInterval);                               // Stop clock
     };
   }, []);  // Empty deps = run once on mount, cleanup on unmount
 
@@ -87,11 +109,29 @@ export default function StatusPanel() {
       {/* API health indicator */}
       <span
         className="flex items-center gap-1.5"
-        style={{ color: "#00E676" }}
-        title="Backend API is reachable"
+        style={{
+          color:
+            apiHealthy === null
+              ? "#FFD600"
+              : apiHealthy
+              ? "#00E676"
+              : "#FF2D2D"
+        }}
+        title={
+          apiHealthy === null
+            ? "Checking API..."
+            : apiHealthy
+            ? "Backend API is reachable"
+            : "Backend API is down"
+        }
       >
         <Server size={11} aria-hidden="true" />
-        API
+
+        {apiHealthy === null
+          ? "CHECKING API"
+          : apiHealthy
+          ? "API"
+          : "API OFFLINE"}
       </span>
 
       {/* Last received WebSocket event */}

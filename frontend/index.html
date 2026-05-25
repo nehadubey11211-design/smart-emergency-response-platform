@@ -24,21 +24,111 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <!-- SEO / Social sharing metadata -->
-    <title>AI Emergency Response System</title>
-    <meta name="description" content="Real-time accident detection and intelligent traffic management powered by AI." />
-    <meta name="theme-color" content="#0A0E1A" />
-
-    <!-- Favicon — Vite serves /vite.svg from the public/ directory -->
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
 
     <!--
-      Google Fonts — Barlow Condensed (display/headings) + JetBrains Mono (body/code)
-      preconnect: opens TCP connection early (reduces font load time by ~100ms)
-      crossorigin: required for cross-origin font requests
+      viewport-fit=cover: critical for notched/punch-hole field devices.
+      Without it, the UI is letterboxed and safe-area insets are ignored —
+      content can be clipped by the notch on Android/iOS field phones.
     -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- ================================================
+      SEO / Primary Metadata
+    ================================================ -->
+    <title>AI Emergency Response System</title>
+    <meta name="description" content="Real-time accident detection and intelligent traffic management powered by AI." />
+
+    <!--
+      theme-color: tints the browser chrome on Android Chrome.
+      Must match your app's header/navbar background for a seamless
+      full-screen feel when added to home screen.
+    -->
+    <meta name="theme-color" content="#0A0E1A" />
+
+    <!-- ================================================
+      Open Graph — controls link preview cards on
+      WhatsApp, Telegram, Twitter, Signal, and email clients.
+      Without these, shared links show a blank/generic card —
+      unacceptable for an official emergency response platform.
+    ================================================ -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:title"       content="AI Emergency Response System" />
+    <meta property="og:description" content="Real-time accident detection and intelligent traffic management powered by AI." />
+    <!--
+      og:image — must be an absolute URL, 1200×630px recommended.
+      Place the file at frontend/public/static/og-preview.png
+      and ensure your deployment serves /static/og-preview.png.
+    -->
+    <meta property="og:image"       content="/static/og-preview.png" />
+    <!--
+      og:url — canonical URL of the deployed app.
+      Update this to your actual production domain before go-live.
+    -->
+    <meta property="og:url"         content="https://your-domain.gov.in" />
+    <meta property="og:site_name"   content="AI Emergency Response System" />
+
+    <!-- ================================================
+      Twitter / X Card — controls preview on Twitter/X.
+      summary_large_image shows the og:image prominently.
+    ================================================ -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:title"       content="AI Emergency Response System" />
+    <meta name="twitter:description" content="Real-time accident detection and intelligent traffic management powered by AI." />
+    <meta name="twitter:image"       content="/static/og-preview.png" />
+
+    <!-- ================================================
+      PWA — Android / Chrome
+      manifest.json is the PWA entry point. Without it:
+        - Chrome won't show the "Add to Home Screen" install prompt
+        - Service workers cannot be scoped correctly
+        - Enterprise MDM deployments cannot discover the app
+      Place manifest.json at frontend/public/manifest.json
+    ================================================ -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- ================================================
+      PWA — iOS / Safari
+      Safari completely ignores manifest.json — these meta tags
+      are the ONLY way to enable PWA behaviour on iPhones/iPads.
+
+      apple-mobile-web-app-capable:
+        Enables standalone (full-screen) mode when launched from
+        home screen. Without this, Safari chrome always shows.
+
+      apple-mobile-web-app-status-bar-style:
+        black-translucent — status bar overlays the app content,
+        giving edge-to-edge display on notched iPhones.
+        Requires viewport-fit=cover (set above) to work correctly.
+
+      apple-mobile-web-app-title:
+        The label shown under the icon on the iOS home screen.
+        Keep it short (≤12 chars) — longer names get truncated.
+    ================================================ -->
+    <meta name="apple-mobile-web-app-capable"           content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style"  content="black-translucent" />
+    <meta name="apple-mobile-web-app-title"             content="AI-ERS" />
+
+    <!-- ================================================
+      Icons
+      favicon.ico      — browser tab icon (all platforms)
+      apple-touch-icon — iOS home screen icon (180×180px PNG).
+                         sizes="180x180" is explicit; Safari falls
+                         back to this if no exact match is found.
+                         Place at frontend/public/apple-touch-icon.png
+    ================================================ -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- ================================================
+      Google Fonts — Inter (body/UI)
+      preconnect: opens TCP connection early (reduces font load
+      time by ~100ms before CSS is even parsed).
+      crossorigin: required for cross-origin font requests.
+
+      TODO: Consider replacing Inter with a more distinctive
+      typeface (e.g. Barlow Condensed for headings + JetBrains
+      Mono for data readouts) to match an emergency ops aesthetic.
+    ================================================ -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -66,3 +156,4 @@
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+

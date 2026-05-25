@@ -24,9 +24,11 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-
+import { StatusCard } from "./Card";
+import PropTypes from 'prop-types';
 /**
  * Standardized Card Component
+ * 
  * 
  * @param {Object} props
  * @param {string} props.variant - Card variant (default, elevated, interactive, flat)
@@ -35,6 +37,19 @@ import { motion } from 'framer-motion';
  * @param {string} props.className - Additional CSS classes
  * @param {Function} props.onClick - Click handler for interactive cards
  */
+Card.propTypes = {
+  variant: PropTypes.oneOf([
+    'default',
+    'elevated',
+    'interactive',
+    'flat'
+  ]),
+
+  padding: PropTypes.bool,
+  children: PropTypes.node,
+  className: PropTypes.string,
+  onClick: PropTypes.func
+};
 export default function Card({
   variant = 'default',
   padding = true,
@@ -163,7 +178,7 @@ export function SimpleCard({
  * Alert Card Component
  * For displaying alerts and notifications
  */
-export function AlertCard({
+export function StatusCard({
   severity = 'info',
   children,
   className = '',

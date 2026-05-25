@@ -24,7 +24,7 @@ import { getSummary, getSeverityBreakdown, getTrends } from "../services/api";
  */
 export function useAnalytics(days = 7) {
   const [summary,   setSummary]   = useState(null);
-  const [breakdown, setBreakdown] = useState([]);
+  const [breakdown, setBreakdown] = useState({});
   const [trends,    setTrends]    = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
@@ -43,6 +43,9 @@ export function useAnalytics(days = 7) {
         getSeverityBreakdown(),
         getTrends(days),
       ]);
+       console.log("SUMMARY:", summaryRes.data);
+       console.log("BREAKDOWN:", breakdownRes.data);
+       console.log("TRENDS:", trendsRes.data);
 
       setSummary(summaryRes.data);
       setBreakdown(breakdownRes.data);

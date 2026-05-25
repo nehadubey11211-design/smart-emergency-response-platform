@@ -88,7 +88,7 @@ class SocketService {
     // ── Event Handlers ─────────────────────────────────────────────────────
 
     this.socket.onopen = () => {
-      console.log("✅ WebSocket connected — live incident feed active");
+      console.log(" WebSocket connected — live incident feed active");
       this._reconnectAttempts = 0;  // Reset backoff counter on successful connect
     };
 
@@ -140,7 +140,7 @@ class SocketService {
       // Exponential backoff: wait 3s, then 6s, then 12s … up to 30s max
       const delay = Math.min(3000 * Math.pow(2, this._reconnectAttempts), 30000);
       this._reconnectAttempts++;
-      console.log(`🔄 Reconnecting in ${delay / 1000}s (attempt ${this._reconnectAttempts})...`);
+      console.log(` Reconnecting in ${delay / 1000}s (attempt ${this._reconnectAttempts})...`);
       setTimeout(() => this.connect(), delay);
     };
 

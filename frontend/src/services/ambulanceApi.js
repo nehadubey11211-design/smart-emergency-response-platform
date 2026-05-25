@@ -21,7 +21,7 @@
 const BASE = import.meta.env.VITE_API_URL || "/api";
 
 async function request(path, options = {}) {
-  const token = localStorage.getItem("access_token");  // matches your JWT storage key
+  const token = localStorage.getItem("token");  // matches your JWT storage key
   const res = await fetch(`${BASE}${path}`, {// <- api/ambulances/1
     headers: {
       "Content-Type": "application/json",

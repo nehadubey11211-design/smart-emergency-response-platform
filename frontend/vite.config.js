@@ -29,7 +29,9 @@
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-
+import format from "date-fns/format";
+import parseISO from "date-fns/parseISO";
+import formatDistanceToNow from "date-fns/formatDistanceToNow";
 export default defineConfig({
   plugins: [
     react(),  // Enables JSX transform, Fast Refresh (HMR for React components)
@@ -44,24 +46,23 @@ export default defineConfig({
       "/api": {
         target:      "http://localhost:8000",
         changeOrigin: true,  // Rewrites the Host header to match the target
-        ws:           true,   // Also proxy WebSocket connections (/api/accidents/ws)
+        
+         ws: true, 
       },
     },
   },
 
   build: {
     outDir:    "dist",       // Production output directory
-    sourcemap: true,         // Generate source maps for debugging production errors
+    sourcemap: false,        // Disable source maps in production for security 
     rollupOptions: {
       output: {
         // Code splitting: separate vendor libs from app code
         // This improves caching — vendor code changes less often than app code
-        manualChunks: {
-          vendor:   ["react", "react-dom", "react-router-dom"],
-          charts:   ["recharts"],
-          utils:    ["axios", "date-fns"],
-        },
+         manualChunks: {vendor: ["axios"]}
       },
     },
   },
+ 
 });
+

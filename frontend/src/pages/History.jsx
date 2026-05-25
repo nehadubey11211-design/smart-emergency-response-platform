@@ -91,22 +91,17 @@ const DEFAULT_ZOOM = 12;
  *
  * Returns a L.DivIcon rendered as a coloured SVG circle so the icon
  * colour mirrors the incident severity without relying on image files.
- *
- * FIX 3: Icons are cached in _iconCache — one L.DivIcon instance per
- * severity level, created once and reused across all renders.  This
- * prevents Leaflet from re-creating DOM nodes on every render cycle.
- *
+ * *
  * @param {string} severity  - e.g. "Critical", "high", "MEDIUM" (any case)
  * @returns {L.DivIcon}
  */
-// FIX 3: Module-level cache — survives re-renders, cleared only on hot-reload
-const _iconCache = {};
+
 
 function createSeverityIcon(severity) {
   // Use consistent severity normalization
   const key = normalizeSeverity(severity);
 
-  // FIX 3: return cached instance if already built
+ 
   if (_iconCache[key]) return _iconCache[key];
 
   const color     = SEVERITY_DOT_COLOR[key] ?? "#888888";
@@ -142,7 +137,7 @@ function createSeverityIcon(severity) {
       </svg>
     </div>`;
 
-  // FIX 3: store in cache before returning
+  
   _iconCache[key] = L.divIcon({
     html,
     className:    "",                       // suppress Leaflet's default white box
@@ -195,22 +190,13 @@ function RecenterMap({ center }) {
  * Props:
  *   filtered {Array} — already-filtered accidents from the parent
  *
- * Fixes applied:
- *   FIX 2  — empty-state guard (no empty map rendered)
- *   FIX 4  — stable marker keys: id → lat+lng → never bare index
- *   FIX 5  — dynamic center on first valid marker; falls back to Pune
- *   FIX 6  — parseFloat + isFinite guard on every coordinate
- *   FIX 7  — validMarkers derived with useMemo (no inline filter in JSX)
- *   FIX 8  — <style> block overrides Leaflet's white popup shell
+
  */
 function MapView({ filtered }) {
-  // FIX 6 + FIX 7: parse & validate coords once, memoised — not recomputed
-  // on every render.  Each valid record gets pre-parsed _lat/_lng attached
-  // so the Marker JSX below never calls parseFloat again.
+  
   const validMarkers = useMemo(() =>
     filtered.reduce((acc, item) => {
-      // FIX 6: parseFloat handles strings, null, undefined; isFinite rejects NaN/±Inf
-      // Backend uses latitude/longitude fields, not lat/lng
+      
       const lat = parseFloat(item.latitude);
       const lng = parseFloat(item.longitude);
       if (!isFinite(lat) || !isFinite(lng)) return acc;   // skip silently
@@ -219,7 +205,7 @@ function MapView({ filtered }) {
     }, []),
   [filtered]);
 
-  // FIX 5: center on first valid marker; fall back to Pune when none exist
+  
   const center = validMarkers.length > 0
     ? [validMarkers[0]._lat, validMarkers[0]._lng]
     : PUNE_CENTER;
@@ -271,27 +257,24 @@ function MapView({ filtered }) {
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
 
-        {/* FIX 7: iterate pre-validated validMarkers — no inline parseFloat */}
+
         {validMarkers.map((acc) => {
-          // FIX 1: normalise severity to lowercase for icon lookup (cache key)
+         
           const icon = createSeverityIcon(acc.severity);
 
-          // FIX 4: id → "lat-lng" string — never a bare array index
+         
           const key = acc.id != null
             ? `marker-${acc.id}`
             : `marker-${acc._lat}-${acc._lng}`;
 
-          // FIX 1: SEVERITY_LABEL_COLOR uses Title-case keys ("Critical" etc.)
-          //        acc.severity comes from the API as-is, so pass it unchanged
-          //        to SEVERITY_LABEL_COLOR while createSeverityIcon handles the
-          //        lowercase normalisation internally.
+          
           const normalized = normalizeSeverity(acc.severity);
 const proper = normalized.charAt(0).toUpperCase() + normalized.slice(1);
 const badgeColor = SEVERITY_LABEL_COLOR[proper] ?? "#888888";
 
           return (
             <Marker key={key} position={[acc._lat, acc._lng]} icon={icon}>
-              {/* FIX 8: popup content styled for dark theme */}
+              
               <Popup>
                 <div
                   style={{
@@ -381,10 +364,22 @@ export default function History() {
 
     const fetchPage = async () => {
       try {
-        const { data } = await getAccidents(
-          { skip: page * PAGE_SIZE, limit: PAGE_SIZE },
-          { signal: controller.signal }
-        );
+         const { data } = await getAccidents(
+  {
+    skip: page * PAGE_SIZE,
+    limit: PAGE_SIZE,
+
+    // Search
+    search: debouncedSearch.trim() || undefined,
+
+    // Severity filter
+    severity:
+      severityFilter !== "All"
+        ? severityFilter.toLowerCase()
+        : undefined,
+  },
+  { signal: controller.signal }
+);
         setAccidents(data);
         setHasMore(data.length >= PAGE_SIZE);
       } catch (err) {
@@ -424,7 +419,7 @@ export default function History() {
     });
   }, [accidents, debouncedSearch, severityFilter]);
 
-  // FIX 7: Pre-computed valid marker count — avoids an inline filter()
+  
   // call inside JSX on every render of the map-view footer.
   const validMarkerCount = useMemo(() =>
     filtered.filter(
@@ -616,17 +611,15 @@ export default function History() {
 
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={COLUMNS.length} className="text-center py-12">
-                      <Loader2
-                        size={20}
-                        className="animate-spin inline"
-                        style={{ color: "var(--text-muted)" }}
-                        aria-label="Loading…"
-                      />
-                    </td>
-                  </tr>
-                ) : error ? (
+                    [...Array(8)].map((_, i) => (
+                      <tr key={i}>
+                        <td colSpan={COLUMNS.length} className="px-4 py-2">
+                          <div className="loading-skeleton h-16 rounded-lg" />
+                        </td>
+                      </tr>
+                    ))
+                  )
+                 : error ? (
                   <tr>
                     <td colSpan={COLUMNS.length} className="text-center py-10">
                       <span style={{ color: "var(--red)" }}>{error}</span>
@@ -781,7 +774,7 @@ export default function History() {
                 style={{ borderTop: "1px solid var(--border)" }}
               >
                 <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  {/* FIX 7: use pre-computed count from useMemo — no inline filter */}
+                  
                   {validMarkerCount} markers shown
                   {debouncedSearch && ` (search: "${debouncedSearch.trim()}")`}
                   {severityFilter !== "All" && ` · severity: ${severityFilter}`}
