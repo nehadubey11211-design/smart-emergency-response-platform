@@ -6,56 +6,22 @@
 # Install all dependencies:
 #   pip install -r requirements.txt
 #
-# Pin EXACT versions (==) in production to guarantee reproducible builds.
-#
-# NEON MIGRATION CHANGES:
-#   The core dependencies are UNCHANGED because Neon is PostgreSQL-compatible.
-#   No new libraries are needed — psycopg2 already handles SSL connections.
-#
-#   The only change is ensuring psycopg2-binary is present (it was already here)
-#   because it handles the SSL connection to Neon via the sslmode=require
-#   parameter in the DATABASE_URL connection string.
-#
-#   OPTIONAL ADDITION:
-#   If you want to use Neon's HTTP/WebSocket driver instead of the standard
-#   PostgreSQL TCP connection, you can install:
-#     neon-serverless (Node.js only — not applicable here)
-#   For Python with FastAPI, the standard psycopg2 driver works perfectly.
-#
-# SSL NOTES FOR NEON:
-#   psycopg2-binary already includes OpenSSL support.
-#   The ?sslmode=require in your DATABASE_URL is enough to enable SSL.
-#   No additional SSL libraries are needed in Python.
-
 
 # ─── Web Framework ────────────────────────────────────────────────────────────
 fastapi==0.111.0           # Async web framework — routes, middleware, DI
 uvicorn[standard]==0.30.1  # ASGI server that runs FastAPI
-                           # [standard] includes uvloop + websockets
 python-multipart==0.0.9    # Required for file upload support in FastAPI
-slowapi==0.1.9            # Rate limiting for FastAPI (optional, but good for security)
+slowapi==0.1.9             # Rate limiting for FastAPI (optional, but good for security)
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.30         # ORM — maps Python classes to DB tables
-asyncpg==0.29.0             # Async PostgreSQL driver used by SQLAlchemy async engine
-
-# NEON NOTE:
-#   psycopg2-binary is the PostgreSQL driver that handles the TCP+SSL
-#   connection to Neon. The 'binary' variant is pre-compiled (no gcc needed).
-#   The SSL handshake to Neon is handled automatically when your DATABASE_URL
-#   contains ?sslmode=require — no extra code needed beyond what's in db.py.
-# psycopg2-binary removed — prefer asyncpg for async SQLAlchemy engines
-
-alembic==1.13.1            # Database migration tool (versioned schema changes)
-                           # Works with Neon exactly the same as local PostgreSQL.
-                           # Just set DATABASE_URL in your environment and run:
-                           #   alembic upgrade head
-
+asyncpg==0.29.0            # Async PostgreSQL driver used by SQLAlchemy async engine
+alembic==1.13.1            # Database migration tool
+                    
 # ─── Validation & Settings ────────────────────────────────────────────────────
 pydantic==2.7.1            # Data validation
 pydantic[email]==2.7.1     # Email validation support
 pydantic-settings==2.3.1   # Settings management from env vars / .env file
-                           # Used to read DATABASE_URL (your Neon URL) from .env
 
 # ─── Authentication ───────────────────────────────────────────────────────────
 pyjwt==2.8.0               # JSON Web Token creation and verification
@@ -72,8 +38,12 @@ httpx==0.27.0              # Async HTTP client
 
 # ─── Utilities ────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1       # Load .env files — IMPORTANT for Neon setup
-                           # This reads your DATABASE_URL (Neon connection string)
-                           # from the .env file into the environment.
 websockets==12.0           # WebSocket protocol support
 redis[asyncio]==5.0.4      # Redis client with asyncio support (caching, pub/sub)
 aiosmtplib==3.0.1          # Async SMTP client for sending emails
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+pytest==8.2.2               # Test runner
+pytest-asyncio==0.23.7      # Support for async test functions
+aiosqlite==0.20.0            # Async SQLite driver — needed because db.py uses
+

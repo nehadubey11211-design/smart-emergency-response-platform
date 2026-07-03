@@ -43,8 +43,16 @@ def ttl_cache(seconds: int):
     "/summary",
     summary="Dashboard summary statistics",
 )
-@ttl_cache(seconds=60)
 async def get_summary(db: AsyncSession = Depends(get_db)):
+    # Deliberately NOT using @ttl_cache here. ttl_cache()'s key is built from
+    # (func_name, args, kwargs) with `db` explicitly stripped out — and since
+    # FastAPI injects `db` as the only argument, that leaves nothing to vary
+    # the key on at all. Every call within the TTL window returns the exact
+    # same cached snapshot regardless of accidents created/resolved in the
+    # meantime. For most endpoints a 60s-stale count would just be a minor
+    # UX tradeoff; for the live incident count on an emergency-response
+    # dashboard, showing a frozen number for up to a minute after a new
+    # accident comes in is a correctness problem, not just a performance one.
     today = datetime.now(tz=timezone.utc).date()
 
     total_today = await db.scalar(

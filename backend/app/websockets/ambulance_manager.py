@@ -16,17 +16,14 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# Redis client for storing event history (streams)
 redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 
 STREAM_MAXLEN = 100
 GLOBAL_STREAM_KEY = "ambulance:events:global"
 GLOBAL_STREAM_MAXLEN = 200
 
-
 class AmbulanceConnectionManager:
     def __init__(self) -> None:
-        # ambulance_id → active WebSocket
         self._connections: Dict[int, WebSocket] = {}
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
@@ -65,10 +62,13 @@ class AmbulanceConnectionManager:
             return
         stamped = {**payload, "server_timestamp": datetime.now(timezone.utc).isoformat()}
         stream_key = f"ambulance:events:{ambulance_id}"
-        # Add to per-ambulance stream
-        await redis_client.xadd(stream_key, {"data": json.dumps(stamped)}, maxlen=STREAM_MAXLEN)
-        # Add to global stream with ambulance_id included
-        await redis_client.xadd(GLOBAL_STREAM_KEY, {"data": json.dumps({**stamped, "ambulance_id": ambulance_id})}, maxlen=GLOBAL_STREAM_MAXLEN)
+        try:
+            # Add to per-ambulance stream
+            await redis_client.xadd(stream_key, {"data": json.dumps(stamped)}, maxlen=STREAM_MAXLEN)
+            # Add to global stream with ambulance_id included
+            await redis_client.xadd(GLOBAL_STREAM_KEY, {"data": json.dumps({**stamped, "ambulance_id": ambulance_id})}, maxlen=GLOBAL_STREAM_MAXLEN)
+        except Exception as exc:
+            logger.warning("Redis event storage failed for ambulance %d: %s", ambulance_id, exc)
 
     async def send_to_ambulance(self, ambulance_id: int, payload: dict) -> bool:
         """
@@ -148,10 +148,8 @@ class AmbulanceConnectionManager:
 
     async def get_global_history(self, limit: int = 50) -> List[dict]:
         """For operator dashboard — recent events across all ambulances."""
-        # Use XRANGE/XREVRANGE to get the most recent `limit` entries from the global stream
         try:
             entries = await redis_client.xrevrange(GLOBAL_STREAM_KEY, count=limit)
-            # xrevrange returns newest → oldest; reverse to chronological
             entries = list(reversed(entries))
             return [json.loads(e[1]["data"]) for e in entries]
         except Exception:

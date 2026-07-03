@@ -79,16 +79,10 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Smart AI Emergency Response System")
     logger.info("Database: %s", db_type)
 
-    # Create all SQLAlchemy-defined tables if they don't exist.
-    # This works identically with Neon and local PostgreSQL.
-    # In production, use Alembic migrations instead.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables verified / created")
 
-    # NEON ADDITION: Verify connection and warm up Neon compute.
-    # For Neon free tier, this prevents the first API call from being slow
-    # due to compute cold start after inactivity.
     db_ok = await check_database_connection()
     if not db_ok and is_neon:
         logger.warning("Neon database connection failed at startup")
@@ -137,12 +131,13 @@ async def version_redirect(request, call_next):
     path = request.url.path
     if path.startswith("/api/") and not path.startswith("/api/v1/"):
         new_path = path.replace("/api/", "/api/v1/", 1)
+        if request.url.query:
+            new_path = f"{new_path}?{request.url.query}"
         return RedirectResponse(url=new_path, status_code=308)
     return await call_next(request)
 
 
 # ─── CORS Middleware ──────────────────────────────────────────────────────────
-# UNCHANGED from original — CORS is not affected by the database change.
 
 app.add_middleware(
     CORSMiddleware,
@@ -156,7 +151,6 @@ app.add_middleware(RequestIDMiddleware)
 
 
 # ─── Router Registration ──────────────────────────────────────────────────────
-# UNCHANGED from original.
 
 app.include_router(
     auth.router,

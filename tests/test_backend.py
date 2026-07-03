@@ -3,108 +3,9 @@ FILE: tests/test_backend.py
 ==================================
 Backend Unit & Integration Tests — pytest
 ==================================
-
-WHY TEST?
-  - Catches regressions (changes that break existing functionality)
-  - Documents expected behaviour (tests are living documentation)
-  - Enables confident refactoring
-  - Required for most production codebases
-
-PYTEST CONCEPTS:
-  @pytest.fixture     — Reusable setup/teardown logic (like setUp in unittest)
-  autouse=True        — Apply a fixture to every test automatically
-  TestClient          — FastAPI's built-in test client (no real HTTP server needed)
-  Depends override    — Replace FastAPI dependencies with test versions
-
-TEST DATABASE:
-  We use SQLite (in-memory) instead of PostgreSQL for tests.
-  Benefits:
-    - No external service needed (tests run anywhere)
-    - Fast (in-memory, no disk I/O)
-    - Isolated (each test starts with a fresh DB)
-  Trade-off: SQLite has slightly different behaviour from PostgreSQL
-  (e.g. ENUM types aren't supported natively — SQLAlchemy handles this).
-
-TEST ISOLATION:
-  The autouse=True fixture creates ALL tables before each test and drops them after.
-  This ensures tests don't affect each other (test independence).
-
-INTERVIEW TALKING POINT:
-  "I used FastAPI's dependency injection system to swap the real PostgreSQL
-  database for an in-memory SQLite database in tests. This means tests run
-  without any external services and complete in under 1 second."
 """
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-# Import our FastAPI app and database components
-from app.main import app
-from app.database.db import Base, get_db
-
-# ─── Test Database Setup ──────────────────────────────────────────────────────
-
-# SQLite in-memory database URL
-# :memory: means the DB exists only while the engine is alive (no file created)
-SQLITE_TEST_URL = "sqlite:///./test_emergency.db"
-
-test_engine = create_engine(
-    SQLITE_TEST_URL,
-    # SQLite requires this flag for multi-threaded use
-    connect_args={"check_same_thread": False},
-)
-
-TestingSessionLocal = sessionmaker(
-    bind=test_engine,
-    autocommit=False,
-    autoflush=False,
-)
-
-
-def override_get_db():
-    """
-    Replaces the real get_db() dependency during tests.
-    Instead of connecting to PostgreSQL, returns a SQLite session.
-    """
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-# Override the database dependency globally for all tests
-app.dependency_overrides[get_db] = override_get_db
-
-
-# ─── Fixtures ─────────────────────────────────────────────────────────────────
-
-@pytest.fixture(autouse=True)
-def setup_and_teardown_db():
-    """
-    Run before EVERY test: create all tables.
-    Run after EVERY test: drop all tables.
-
-    autouse=True means this fixture is automatically applied without
-    listing it as a parameter in every test function.
-
-    This gives each test a completely clean database state.
-    """
-    Base.metadata.create_all(bind=test_engine)
-    yield   # Test runs here
-    Base.metadata.drop_all(bind=test_engine)
-
-
-@pytest.fixture
-def client():
-    """
-    FastAPI TestClient — sends HTTP requests to the app without a real server.
-    The app processes them synchronously, making tests fast and deterministic.
-    """
-    return TestClient(app)
-
 
 @pytest.fixture
 def registered_user(client):
@@ -228,9 +129,9 @@ class TestAccidents:
         assert response.status_code == 200
         assert response.json() == []
 
-    def test_create_accident_returns_201(self, client):
+    def test_create_accident_returns_201(self, client, auth_headers):
         """Creating a valid accident should return 201 with the created record."""
-        response = client.post("/api/accidents/", json=self.VALID_ACCIDENT)
+        response = client.post("/api/accidents/", json=self.VALID_ACCIDENT, headers=auth_headers)
         assert response.status_code == 201
         data = response.json()
         assert data["location"]   == self.VALID_ACCIDENT["location"]
@@ -240,16 +141,16 @@ class TestAccidents:
         assert "id" in data                        # Server-generated ID
         assert "detected_at" in data               # Server-generated timestamp
 
-    def test_created_accident_appears_in_list(self, client):
+    def test_created_accident_appears_in_list(self, client, auth_headers):
         """After creating an accident, it should appear in GET /accidents/."""
-        client.post("/api/accidents/", json=self.VALID_ACCIDENT)
+        client.post("/api/accidents/", json=self.VALID_ACCIDENT, headers=auth_headers)
         response = client.get("/api/accidents/")
         assert response.status_code == 200
         assert len(response.json()) == 1
 
-    def test_get_single_accident_by_id(self, client):
+    def test_get_single_accident_by_id(self, client, auth_headers):
         """GET /accidents/{id} should return the specific accident."""
-        create_res = client.post("/api/accidents/", json=self.VALID_ACCIDENT)
+        create_res = client.post("/api/accidents/", json=self.VALID_ACCIDENT, headers=auth_headers)
         accident_id = create_res.json()["id"]
 
         response = client.get(f"/api/accidents/{accident_id}")
@@ -261,45 +162,46 @@ class TestAccidents:
         response = client.get("/api/accidents/99999")
         assert response.status_code == 404
 
-    def test_update_accident_status_to_resolved(self, client):
+    def test_update_accident_status_to_resolved(self, client, auth_headers):
         """
         PATCH /accidents/{id} with status=resolved should:
           - Return the updated record
           - Set resolved_at timestamp automatically
         """
-        create_res = client.post("/api/accidents/", json=self.VALID_ACCIDENT)
+        create_res = client.post("/api/accidents/", json=self.VALID_ACCIDENT, headers=auth_headers)
         accident_id = create_res.json()["id"]
 
         response = client.patch(
             f"/api/accidents/{accident_id}",
-            json={"status": "resolved"}
+            json={"status": "resolved"},
+            headers=auth_headers,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["status"]     == "resolved"
         assert data["resolved_at"] is not None   # Auto-stamped
 
-    def test_update_only_sends_changed_fields(self, client):
+    def test_update_only_sends_changed_fields(self, client, auth_headers):
         """PATCH should only change specified fields (partial update)."""
-        create_res = client.post("/api/accidents/", json=self.VALID_ACCIDENT)
+        create_res = client.post("/api/accidents/", json=self.VALID_ACCIDENT, headers=auth_headers)
         accident_id = create_res.json()["id"]
 
         # Only update severity — location should remain unchanged
-        client.patch(f"/api/accidents/{accident_id}", json={"severity": "critical"})
+        client.patch(f"/api/accidents/{accident_id}", json={"severity": "critical"}, headers=auth_headers)
 
         get_res = client.get(f"/api/accidents/{accident_id}")
         assert get_res.json()["severity"]  == "critical"
         assert get_res.json()["location"]  == self.VALID_ACCIDENT["location"]
 
-    def test_filter_by_status(self, client):
+    def test_filter_by_status(self, client, auth_headers):
         """GET /accidents/?status=detected should only return matching records."""
         # Create two accidents
-        client.post("/api/accidents/", json=self.VALID_ACCIDENT)
-        res2 = client.post("/api/accidents/", json=self.VALID_ACCIDENT)
+        client.post("/api/accidents/", json=self.VALID_ACCIDENT, headers=auth_headers)
+        res2 = client.post("/api/accidents/", json=self.VALID_ACCIDENT, headers=auth_headers)
         accident_id = res2.json()["id"]
 
         # Resolve one of them
-        client.patch(f"/api/accidents/{accident_id}", json={"status": "resolved"})
+        client.patch(f"/api/accidents/{accident_id}", json={"status": "resolved"}, headers=auth_headers)
 
         # Filter for detected only
         response = client.get("/api/accidents/?status=detected")
@@ -311,11 +213,17 @@ class TestAccidents:
 # ─── Analytics Tests ──────────────────────────────────────────────────────────
 
 class TestAnalytics:
-    """Tests for /api/analytics endpoints."""
+    """
+    Tests for /api/analytics endpoints.
 
-    def test_summary_returns_expected_keys(self, client):
+    The whole analytics router requires auth — see analytics.py:
+    `router = APIRouter(dependencies=[Depends(get_current_user_from_header)])`
+    — so every call here needs auth_headers, including plain GETs.
+    """
+
+    def test_summary_returns_expected_keys(self, client, auth_headers):
         """Summary endpoint should return all required KPI fields."""
-        response = client.get("/api/analytics/summary")
+        response = client.get("/api/analytics/summary", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
 
@@ -328,29 +236,29 @@ class TestAnalytics:
         for key in required_keys:
             assert key in data, f"Missing key: {key}"
 
-    def test_summary_increments_after_creating_accident(self, client):
+    def test_summary_increments_after_creating_accident(self, client, auth_headers):
         """Creating an accident should increase total_today by 1."""
-        before = client.get("/api/analytics/summary").json()["total_today"]
+        before = client.get("/api/analytics/summary", headers=auth_headers).json()["total_today"]
 
         client.post("/api/accidents/", json={
             "location": "Somewhere", "severity": "low"
-        })
+        }, headers=auth_headers)
 
-        after = client.get("/api/analytics/summary").json()["total_today"]
+        after = client.get("/api/analytics/summary", headers=auth_headers).json()["total_today"]
         assert after == before + 1
 
-    def test_trends_returns_list(self, client):
+    def test_trends_returns_list(self, client, auth_headers):
         """Trends endpoint should return a list (possibly empty)."""
-        response = client.get("/api/analytics/trends?days=7")
+        response = client.get("/api/analytics/trends?days=7", headers=auth_headers)
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
-    def test_severity_breakdown_returns_list(self, client):
+    def test_severity_breakdown_returns_list(self, client, auth_headers):
         """Severity breakdown should return a list of {severity, count} objects."""
         client.post("/api/accidents/", json={
             "location": "Test", "severity": "high"
-        })
-        response = client.get("/api/analytics/severity-breakdown")
+        }, headers=auth_headers)
+        response = client.get("/api/analytics/severity-breakdown", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)

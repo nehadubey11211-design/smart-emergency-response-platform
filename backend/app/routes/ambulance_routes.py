@@ -78,12 +78,13 @@ async def get_nearby_hospitals(
     lon: float       = Query(..., description="Pickup/accident longitude"),
     radius_km: float = Query(30.0),
     limit: int       = Query(3),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Find nearest hospitals to a given location.
     Called by frontend after patient pickup to render Route 2.
     """
-    hospitals = svc.get_nearby_hospitals(lat, lon, radius_km, limit)
+    hospitals = await svc.get_nearby_hospitals(db, lat, lon, radius_km, limit)
     if not hospitals:
         raise HTTPException(status_code=404, detail="No hospitals found within radius.")
     return hospitals
@@ -251,7 +252,7 @@ async def patient_pickup(
     if not unit:
         raise HTTPException(status_code=404, detail="Ambulance not found.")
 
-    hospitals = svc.get_nearby_hospitals(accident_lat, accident_lon, limit=1)
+    hospitals = await svc.get_nearby_hospitals(db, accident_lat, accident_lon, limit=1)
     if not hospitals:
         raise HTTPException(status_code=404, detail="No hospitals found nearby.")
 

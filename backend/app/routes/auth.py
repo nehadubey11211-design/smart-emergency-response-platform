@@ -180,7 +180,15 @@ async def login(request: Request, credentials: UserLogin, db: AsyncSession = Dep
     result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
-    dummy_hash = "$2b$12$dummyhashfortimingprevention00000000000000000000000000"
+    # A real bcrypt hash of an arbitrary, never-used password. This exists
+    # purely so checkpw() still does real work (constant-ish time) when the
+    # email doesn't match a user, so the response timing doesn't reveal
+    # whether the account exists. It must be a VALID bcrypt hash for this to
+    # work — the previous placeholder string "$2b$12$dummyhashfortiming..."
+    # was not actual bcrypt output (wrong salt format), so bcrypt.checkpw()
+    # raised ValueError: Invalid salt instead of returning False, which
+    # crashed login with a 500 for every nonexistent-email login attempt.
+    dummy_hash = "$2b$12$BScbQPfljtf0i6M1mY7cg.YGf0Jv0DVDl5b5HiszwZKJR2US4j3X6"
     stored_hash = user.password if user else dummy_hash
     password_valid = verify_password(credentials.password, stored_hash)
 
