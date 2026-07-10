@@ -1,4 +1,3 @@
-
 /**
  * FILE: frontend/src/components/ForgotPassword.jsx
  * =========================================================
@@ -8,15 +7,15 @@
  * Multi-step password recovery flow with OTP verification
  * 
  * FLOW:
- * 1. Enter email/mobile → Send OTP
- * 2. Verify OTP → Show password fields  
- * 3. Reset password → Redirect to login
+ * 1. Enter email → Send OTP
+ * 2. Enter OTP + new password together → backend verifies OTP and resets
+ *    password in a single call → redirect to login
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2, Mail, Lock, ArrowLeft, Shield } from "lucide-react";
-import { sendResetOtp, verifyResetOtp, resetPassword } from "../services/api";
+import { sendResetOtp, verifyResetOtp } from "../services/api";
 
 
 // ─── Tailwind class helpers (matching Login.jsx) ────────────────────────────
@@ -144,7 +143,6 @@ useEffect(() => {
 
   // Validation functions
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const isValidMobile = (mobile) => /^[6-9]\d{9}$/.test(mobile);
   const isValidOTP = (otp) => /^\d{6}$/.test(otp);
 
   
@@ -159,28 +157,23 @@ useEffect(() => {
 
     // Validation
     if (!emailOrMobile.trim()) {
-      setError("Email or mobile number is required");
+      setError("Email address is required");
       return;
     }
 
-    const isEmail = isValidEmail(emailOrMobile);
-    const isMobile = isValidMobile(emailOrMobile);
-
-    if (!isEmail && !isMobile) {
-      setError("Enter a valid email address or mobile number");
+    if (!isValidEmail(emailOrMobile)) {
+      setError("Enter a valid email address");
       return;
     }
 
     setLoading(true);
 
     try {
-      const payload = isEmail 
-        ? { email: emailOrMobile }
-        : { mobile: emailOrMobile };
+      const payload = { email: emailOrMobile };
 
       await sendResetOtp(payload);
       
-      setSuccess("OTP sent successfully! Please check your " + (isEmail ? "email" : "SMS"));
+      setSuccess("OTP sent successfully! Please check your email.");
       setStep(2);
       setSubmitted(false);
       startTimer(300); // 5 minutes
@@ -192,13 +185,13 @@ useEffect(() => {
     }
   };
 
-  const handleVerifyOTP = async (e) => {
+  const handleVerifyAndReset = async (e) => {
     e.preventDefault();
     setSubmitted(true);
     setError("");
     setSuccess("");
 
-    // Validation
+    // Validation — OTP
     if (!otp.trim()) {
       setError("OTP is required");
       return;
@@ -209,35 +202,7 @@ useEffect(() => {
       return;
     }
 
-    setLoading(true);
-
-    try {
-      const isEmail = isValidEmail(emailOrMobile);
-      const payload = {
-        [isEmail ? "email" : "mobile"]: emailOrMobile,
-        otp
-      };
-
-      await verifyResetOtp(payload);
-      
-      setSuccess("OTP verified! Please set your new password");
-      setStep(3);
-      setSubmitted(false);
-      
-    } catch (err) {
-      setError(err?.response?.data?.detail || err?.message || "Invalid OTP");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-    setSubmitted(true);
-    setError("");
-    setSuccess("");
-
-    // Validation
+    // Validation — new password
     if (!newPassword.trim()) {
       setError("New password is required");
       return;
@@ -261,24 +226,24 @@ useEffect(() => {
     setLoading(true);
 
     try {
-      const isEmail = isValidEmail(emailOrMobile);
       const payload = {
-        [isEmail ? "email" : "mobile"]: emailOrMobile,
+        email: emailOrMobile,
         otp,
-        new_password: newPassword
+        new_password: newPassword,
       };
 
-      await resetPassword(payload);
-      
+      await verifyResetOtp(payload);
+
       setSuccess("Password reset successfully! Redirecting to login...");
-      
+      setSubmitted(false);
+
       // Redirect to login after 2 seconds
       setTimeout(() => {
         navigate("/login");
       }, 2000);
-      
+
     } catch (err) {
-      setError(err?.response?.data?.detail || err?.message || "Failed to reset password");
+      setError(err?.response?.data?.detail || err?.message || "Invalid OTP or unable to reset password");
     } finally {
       setLoading(false);
     }
@@ -291,19 +256,13 @@ useEffect(() => {
     setSuccess("");
     
     try {
-      const isEmail = isValidEmail(emailOrMobile);
-      const payload = isEmail 
-        ? { email: emailOrMobile }
-        : { mobile: emailOrMobile };
+      const payload = { email: emailOrMobile };
 
       await sendResetOtp(payload);
       
-     setSuccess("OTP resent successfully!");
+      setSuccess("OTP resent successfully! Please check your email.");
       startTimer(300);
       setResendCooldown(30);
-    
-      
-      
     } catch (err) {
       setError(err?.response?.data?.detail || err?.message || "Failed to resend OTP");
     }
@@ -366,24 +325,23 @@ useEffect(() => {
             Recover Your Account
           </h1>
           <p className="text-sm text-slate-400">
-            {step === 1 && "Enter your registered email or mobile number"}
-            {step === 2 && "Enter the 6-digit OTP sent to your device"}
-            {step === 3 && "Set your new password"}
+            {step === 1 && "Enter your registered email address"}
+            {step === 2 && "Enter the OTP and choose your new password"}
           </p>
         </div>
 
-        {/* Step 1: Email/Mobile Input */}
+        {/* Step 1: Email Input */}
         {step === 1 && (
           <form onSubmit={handleSendOTP}>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
-                type="text"
-                placeholder="Email Address or Mobile Number"
+                type="email"
+                placeholder="Email Address"
                 value={emailOrMobile}
                 onChange={(e) => setEmailOrMobile(e.target.value)}
                 className={`${inputClasses} pl-10 ${submitted && !emailOrMobile.trim() ? 'border-red-500' : ''}`}
-                aria-label="Email or mobile number"
+                aria-label="Email address"
                 aria-invalid={submitted && !emailOrMobile.trim() ? "true" : undefined}
               />
             </div>
@@ -402,9 +360,9 @@ useEffect(() => {
           </form>
         )}
 
-        {/* Step 2: OTP Verification */}
+        {/* Step 2: OTP + New Password (combined — backend verifies and resets in one call) */}
         {step === 2 && (
-          <form onSubmit={handleVerifyOTP}>
+          <form onSubmit={handleVerifyAndReset}>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
@@ -433,23 +391,6 @@ useEffect(() => {
               </button>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-6 w-full rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {loading ? (
-                <Loader2 className="animate-spin mx-auto" size={18} />
-              ) : (
-                "Verify OTP"
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* Step 3: Reset Password */}
-        {step === 3 && (
-          <form onSubmit={handleResetPassword}>
             <div className="relative mt-3">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
@@ -535,4 +476,3 @@ useEffect(() => {
     </div>
   );
 }
-

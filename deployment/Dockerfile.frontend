@@ -1,0 +1,42 @@
+# FILE: deployement/Dockerfile.frontend
+# =========================================================
+# Multi-Stage Docker Build — React (Vite) Frontend
+# =========================================================
+# Stage 1: install deps + `vite build` -> static files in /app/dist
+# Stage 2: serve those static files with nginx (small, fast, production-grade)
+#
+# Build context is the repo root (see docker-compose.yml), so paths below
+# are written relative to the repo root, matching the backend Dockerfile's
+# convention.
+
+# ─── Stage 1: Build ────────────────────────────────────────────────────────
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+# Copy only package files first so `npm install` is cached unless
+# dependencies actually change (same layer-caching trick as the backend).
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ .
+
+# VITE_API_URL is baked into the static build at build time — Vite env
+# vars are NOT read at container runtime, only at `vite build` time.
+ARG VITE_API_URL=http://localhost:8000/api
+ENV VITE_API_URL=$VITE_API_URL
+
+RUN npm run build
+
+# ─── Stage 2: Serve ────────────────────────────────────────────────────────
+FROM nginx:alpine AS runtime
+
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY deployement/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -q -O- http://localhost:80/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

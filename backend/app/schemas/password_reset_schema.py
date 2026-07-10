@@ -5,7 +5,7 @@ Pydantic Schemas — Password Reset Request & Response
 =====================================================
 """
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field , field_validator
 
 
 # ─── Request Schemas ──────────────────────────────────────────────────────────
@@ -18,6 +18,10 @@ class ForgotPasswordRequest(BaseModel):
     EmailStr auto-validates format (e.g. rejects "notanemail").
     """
     email: EmailStr
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower() if isinstance(v, str) else v
 
 
 class VerifyOTPRequest(BaseModel):
@@ -34,6 +38,10 @@ class VerifyOTPRequest(BaseModel):
       new_password → minimum 8 characters (matches UserCreate in user_schema.py)
     """
     email: EmailStr
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower() if isinstance(v, str) else v
 
     otp: str = Field(
         ...,
