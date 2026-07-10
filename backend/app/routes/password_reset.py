@@ -19,7 +19,7 @@ from app.schemas.password_reset_schema import (
     VerifyOTPRequest,
     MessageResponse,
 )
-from app.services.otp_service import OTPService
+from app.services.otp_service import OTPService, RedisUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,16 @@ async def forgot_password(
             ),
         )
 
+    except RedisUnavailableError as e:
+        logger.error(f"Redis unavailable during forgot_password for {body.email!r}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Password reset is temporarily unavailable because Redis is not running. "
+                "Start Redis and retry, or set REDIS_URL correctly."
+            ),
+        )
+
     except Exception as e:
         # Catch-all — always log so nothing silently fails.
         logger.exception(f"Unexpected error in forgot_password for {body.email!r}: {e}")
@@ -178,6 +188,16 @@ async def verify_otp_and_reset(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
+        )
+
+    except RedisUnavailableError as e:
+        logger.error(f"Redis unavailable during verify_otp_and_reset for {body.email!r}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Password reset is temporarily unavailable because Redis is not running. "
+                "Start Redis and retry, or set REDIS_URL correctly."
+            ),
         )
 
     except Exception as e:

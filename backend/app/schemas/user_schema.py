@@ -12,7 +12,7 @@ WHY PYDANTIC SCHEMAS?
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field , field_validator
 
 
 # ─── Request Schemas (Incoming Data) ─────────────────────────────────────────
@@ -27,6 +27,10 @@ class UserCreate(BaseModel):
     name:     str      = Field(..., min_length=2, max_length=100,
                                description="Full display name")
     email:    EmailStr = Field(..., description="Unique login email")
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower() if isinstance(v, str) else v
     password: str                     = Field(
         ..., min_length=8,
         description="Plaintext password (hashed before storage)",
@@ -37,6 +41,10 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     """Schema for POST /api/auth/login."""
     email:    EmailStr
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower() if isinstance(v, str) else v
     password: str
 
 

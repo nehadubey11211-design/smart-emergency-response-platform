@@ -140,28 +140,23 @@ export const getMe = (token) =>
 
 
 /**
- * POST /api/auth/send-reset-otp
+ * POST /api/v1/password/forgot
  * Send OTP for password reset
- * @param {{ email?: string, mobile?: string }} payload
+ * @param {{ email: string }} payload
  */
 export const sendResetOtp = (payload) =>
-  api.post("v1/auth/send-reset-otp", payload);
+  api.post("v1/password/forgot", payload);
 
 /**
- * POST /api/auth/verify-reset-otp
- * Verify OTP for password reset
- * @param {{ email?: string, mobile?: string, otp: string }} payload
+ * POST /api/v1/password/verify-otp
+ * Verify OTP and reset password in a single call.
+ * The backend verifies the OTP and updates the password atomically in one
+ * request — there is no separate "reset password" step/endpoint, so this
+ * payload must include new_password up front.
+ * @param {{ email: string, otp: string, new_password: string }} payload
  */
 export const verifyResetOtp = (payload) =>
-  api.post("v1/auth/verify-reset-otp", payload);
-
-/**
- * POST /api/auth/reset-password
- * Reset password with verified OTP
- * @param {{ email?: string, mobile?: string, otp: string, new_password: string }} payload
- */
-export const resetPassword = (payload) =>
-  api.post("v1/auth/reset-password", payload);
+  api.post("v1/password/verify-otp", payload);
 
 
 // --- Accidents API -----------------------------------------------------------

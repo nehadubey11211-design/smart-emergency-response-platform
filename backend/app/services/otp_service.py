@@ -15,6 +15,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import redis.asyncio as aioredis
+from redis.exceptions import ConnectionError as RedisConnectionError, RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +29,10 @@ redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 
 OTP_TTL_SECONDS = 300  # 5 minutes
 OTP_MAX_ATTEMPTS = 3
+
+
+class RedisUnavailableError(RuntimeError):
+    """Raised when Redis is not available for OTP storage."""
 
 
 class OTPService:
@@ -44,7 +49,11 @@ class OTPService:
             raise ValueError("This account has been deactivated. Contact an administrator.")
 
         otp = generate_otp()
-        await OTPService._store_otp(email=email, otp=otp)
+        try:
+            await OTPService._store_otp(email=email, otp=otp)
+        except RedisUnavailableError:
+            raise
+
         await OTPService._send_otp_email(recipient_email=email, otp=otp, user_name=user.name)
 
         logger.info("OTP generated and sent to %s (user: %s)", email, user.name)
@@ -94,40 +103,66 @@ class OTPService:
         # Hash the OTP before storing (never store plaintext)
         otp_hash = hmac.new(settings.SECRET_KEY.encode(), otp.encode(), hashlib.sha256).hexdigest()
         key = f"otp:{email}"
-        await redis_client.setex(key, OTP_TTL_SECONDS, json.dumps({
-            "otp_hash": otp_hash,
-            "attempts": 0
-        }))
+        try:
+            await redis_client.setex(key, OTP_TTL_SECONDS, json.dumps({
+                "otp_hash": otp_hash,
+                "attempts": 0
+            }))
+        except (RedisConnectionError, RedisError) as exc:
+            logger.error("Redis unavailable while storing OTP for %s: %s", email, exc)
+            raise RedisUnavailableError("Redis is unavailable. Please start Redis and configure REDIS_URL.") from exc
+
         logger.debug(f"OTP stored for {email} with TTL {OTP_TTL_SECONDS}s")
 
     @staticmethod
     async def _verify_otp(email: str, submitted_otp: str) -> tuple[bool, str]:
         key = f"otp:{email}"
-        raw = await redis_client.get(key)
+        try:
+            raw = await redis_client.get(key)
+        except (RedisConnectionError, RedisError) as exc:
+            logger.error("Redis unavailable while verifying OTP for %s: %s", email, exc)
+            raise RedisUnavailableError("Redis is unavailable. Please start Redis and configure REDIS_URL.") from exc
+
         if not raw:
             return False, "not_found"
 
         record = json.loads(raw)
         if record.get("attempts", 0) >= OTP_MAX_ATTEMPTS:
-            await redis_client.delete(key)
+            try:
+                await redis_client.delete(key)
+            except (RedisConnectionError, RedisError) as exc:
+                logger.error("Redis unavailable while deleting locked OTP for %s: %s", email, exc)
+                raise RedisUnavailableError("Redis is unavailable. Please start Redis and configure REDIS_URL.") from exc
             return False, "locked"
 
         expected_hash = hmac.new(settings.SECRET_KEY.encode(), submitted_otp.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(record["otp_hash"], expected_hash):
             record["attempts"] = record.get("attempts", 0) + 1
-            remaining_ttl = await redis_client.ttl(key)
-            # Ensure TTL is at least 1 second when rewriting
-            await redis_client.setex(key, max(remaining_ttl, 1), json.dumps(record))
+            try:
+                remaining_ttl = await redis_client.ttl(key)
+                await redis_client.setex(key, max(remaining_ttl, 1), json.dumps(record))
+            except (RedisConnectionError, RedisError) as exc:
+                logger.error("Redis unavailable while updating OTP attempts for %s: %s", email, exc)
+                raise RedisUnavailableError("Redis is unavailable. Please start Redis and configure REDIS_URL.") from exc
             remaining = OTP_MAX_ATTEMPTS - record["attempts"]
             return False, f"invalid:{remaining}"
 
-        await redis_client.delete(key)
+        try:
+            await redis_client.delete(key)
+        except (RedisConnectionError, RedisError) as exc:
+            logger.error("Redis unavailable while deleting OTP after successful verify for %s: %s", email, exc)
+            raise RedisUnavailableError("Redis is unavailable. Please start Redis and configure REDIS_URL.") from exc
+
         return True, "valid"
 
     @staticmethod
     async def _delete_otp(email: str) -> None:
         key = f"otp:{email}"
-        await redis_client.delete(key)
+        try:
+            await redis_client.delete(key)
+        except (RedisConnectionError, RedisError) as exc:
+            logger.error("Redis unavailable while deleting OTP for %s: %s", email, exc)
+            raise RedisUnavailableError("Redis is unavailable. Please start Redis and configure REDIS_URL.") from exc
 
     @staticmethod
     async def _send_otp_email(recipient_email: str, otp: str, user_name: str) -> None:
